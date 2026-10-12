@@ -17,6 +17,7 @@
 | **אנדרואיד** | `RDesk` (APK): צופה. שולטים במחשב מהטלפון, עם מגע כטאצ'פד ומקלדת | *Actions → build-android-apk → Run workflow*, ומורידים את `RDesk-android` (קובץ `app-debug.apk`). או מקומית: `cd ../android && ./gradlew assembleDebug` |
 
 - את התוכנות צריך לכוון לשרת האיתות שלכם: משתנה ה-repository `RDESK_SERVER` (*Settings → Secrets and variables → Actions → Variables*, למשל `wss://signal.example.com`) נשתל בעת הבנייה. אפשר גם לשנות בהגדרות התוכנה/האפליקציה.
+- **שימו לב:** GitHub מציג workflow בלשונית Actions רק אחרי שהקובץ נמצא בענף הראשי (main/master). מיזגו את הענף לפני שמריצים.
 - התקנת APK מחוץ ל-Play דורשת לאשר "התקנה ממקורות לא ידועים".
 - אפליקציית האנדרואיד היא **צופה בלבד** (שולטת במחשב). שליטה *בטלפון* מהמחשב לא נתמכת עדיין.
 
@@ -106,8 +107,12 @@ pyinstaller --onefile --windowed --name RDesk-Viewer run_viewer.py
 
 ## בדיקות
 ```bash
-python -m pytest -q
+python -m pytest -q              # 21 בדיקות, כולל תאימות מול Chromium (דורש node + playwright, אחרת מדלג)
+cd ../android && ./gradlew testDebugUnitTest   # 7 בדיקות: ה-Kotlin מול וקטורים שנוצרו ב-Python
 ```
+בדיקות ה-`test_browser_interop` מריצות צופה ב-Chromium (אותו libwebrtc כמו באנדרואיד) מול המארח האמיתי,
+ומוכיחות שהפרוטוקול (SDP חתום, קוד אבטחה, ערוצי נתונים, קבצים) עובד בין מימושים שונים.
+
 18 בדיקות מקצה לקצה (בלי תצוגה גרפית): חיבור באישור, גישה ללא נוכחות, סיסמה שגויה וחסימה,
 דחייה והצפה, קוד אבטחה, צפייה בלבד, שני צופים (busy), צ'אט, לוח, איכות, קבצים והרשאות, ושמירת הגדרות.
 
