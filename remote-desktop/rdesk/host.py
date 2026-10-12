@@ -55,7 +55,6 @@ class HostService:
         self,
         server_url: str,
         host_id: str,
-        password: str,
         screen=None,
         injector=None,
         clipboard=None,
@@ -63,10 +62,15 @@ class HostService:
         on_event: Callable[..., None] | None = None,
         download_dir: Path | str = Path.home() / "RDesk" / "Received",
         rtc_config: RTCConfiguration | None = None,
+        unattended_key: bytes | None = None,
+        unattended_perms: P.Permissions | None = None,
     ) -> None:
         self.server_url = server_url
         self.id = host_id
-        self.password = password
+        # חיבור עם מזהה בלבד מחכה לאישור המשתמש. אם הוגדרה סיסמה קבועה
+        # (גישה ללא נוכחות) - מי שמקליד אותה נכנס בלי אישור.
+        self.unattended_key = unattended_key
+        self.unattended_perms = unattended_perms or P.Permissions()
         self.screen = screen or MssScreen()
         if injector is None:
             from .inject import PynputInjector
@@ -82,6 +86,7 @@ class HostService:
         self._pending: dict[str, tuple[str, float]] = {}   # peer -> (nonce, זמן)
         self._busy_negotiating = False
         self._fails = 0
+        self._declines = 0
         self._blocked_until = 0.0
         self._stop = asyncio.Event()
         self.registered = asyncio.Event()
@@ -153,31 +158,46 @@ class HostService:
                 return
             nonce = nonce_t[0]
             sdp = str(p.get("sdp", ""))
-            if now < self._blocked_until or not P.verify_tag(
-                    self.password, nonce, "viewer", sdp, str(p.get("auth", ""))):
-                self._fails += 1
-                if self._fails >= P.MAX_AUTH_ATTEMPTS:
-                    self._blocked_until = now + P.BLOCK_SECONDS
-                    self._fails = 0
-                    self.on_event("alert", text="Too many wrong passwords; blocked temporarily")
-                await self._send(peer, {"kind": "reject", "reason": "bad password"})
-                return
+            tag = p.get("auth")
+            key, mode = None, "interactive"
+            if tag and self.unattended_key is not None:
+                # הוקלדה סיסמה והמארח מוגדר לגישה ללא נוכחות - חייבת להיות נכונה
+                if now < self._blocked_until or not P.verify_tag(
+                        self.unattended_key, nonce, "viewer", sdp, str(tag)):
+                    self._fails += 1
+                    if self._fails >= P.MAX_AUTH_ATTEMPTS:
+                        self._blocked_until = now + P.BLOCK_SECONDS
+                        self._fails = 0
+                        self.on_event("alert", reason="blocked")
+                    await self._send(peer, {"kind": "reject", "reason": "bad password"})
+                    return
+                key, mode = self.unattended_key, "unattended"
+            # בלי סיסמה (או כשאין סיסמה קבועה במארח): ממתינים לאישור המשתמש
             self._fails = 0
             self._busy_negotiating = True
             try:
-                await self._accept_offer(peer, nonce, sdp)
+                await self._accept_offer(peer, nonce, sdp, key, mode)
             finally:
                 self._busy_negotiating = False
 
     # ------------------------------------------------------------ סשן
-    async def _accept_offer(self, peer: str, nonce: str, sdp: str) -> None:
-        if self.approval is not None:
+    async def _accept_offer(self, peer: str, nonce: str, sdp: str, key: bytes | None, mode: str) -> None:
+        if mode == "unattended":
+            perms = P.Permissions(**self.unattended_perms.to_json())   # בלי אישור
+        elif self.approval is not None:
             perms = await self.approval({"peer": peer})
         else:
             perms = P.Permissions()
         if perms is None:
+            # הגנה מפני הצפת חלונות אישור: 3 דחיות רצופות חוסמות לדקה
+            self._declines += 1
+            if self._declines >= 3:
+                self._declines = 0
+                self._blocked_until = time.time() + P.BLOCK_SECONDS
+                self.on_event("alert", reason="spam")
             await self._send(peer, {"kind": "reject", "reason": "declined"})
             return
+        self._declines = 0
 
         pc = RTCPeerConnection(self.rtc_config)
         sess = Session(peer, pc, perms)
@@ -212,9 +232,10 @@ class HostService:
         self.session = sess
         await self._send(peer, {
             "kind": "answer", "sdp": answer,
-            "auth": P.auth_tag(self.password, nonce, "host", answer),
+            "auth": P.auth_tag(key, nonce, "host", answer) if key else None,
         })
-        self.on_event("session_start", peer=peer, perms=perms.to_json())
+        self.on_event("session_start", peer=peer, perms=perms.to_json(), mode=mode,
+                      code=P.session_code(sdp, answer))
 
     async def _on_control_open(self, sess: Session) -> None:
         mons = await sess.track.refresh_monitors()
@@ -277,6 +298,12 @@ class HostService:
                 self._ctl_send(sess, {"t": "clip", "text": cur})
 
     # ------------------------------------------------------------ פעולות מה-GUI
+    def set_unattended(self, key: bytes | None, perms: P.Permissions | None = None) -> None:
+        """מפעיל/מכבה גישה ללא נוכחות. key=None מכבה."""
+        self.unattended_key = key
+        if perms is not None:
+            self.unattended_perms = perms
+
     def send_chat(self, text: str) -> None:
         if self.session:
             self._ctl_send(self.session, {"t": "chat", "text": text[:2000]})

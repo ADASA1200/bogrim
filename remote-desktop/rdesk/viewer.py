@@ -45,12 +45,15 @@ class ViewerClient:
         self.monitor = 1
         self.perms = P.Permissions()
         self.connected = False
+        self.mode = "interactive"
+        self.code = ""
         self._tasks: list[asyncio.Task] = []
         self._hello = asyncio.Event()
         self._last_clip: str | None = None
 
     # ------------------------------------------------------------ חיבור
-    async def connect(self, host_id: str, password: str, timeout: float = 90) -> None:
+    async def connect(self, host_id: str, password: str = "", timeout: float = 90) -> None:
+        """password אופציונלי: סיסמת גישה ללא נוכחות. בלעדיה ממתינים לאישור המשתמש."""
         host_id = P.clean_id(host_id)
         me = "v" + P.new_nonce()[:12]
         async with websockets.connect(self.server_url, max_size=P.MAX_SIGNAL_BYTES) as ws:
@@ -67,6 +70,8 @@ class ViewerClient:
             if ch.get("kind") != "challenge":
                 raise ConnectError("protocol error")
             nonce = str(ch["nonce"])
+            key = (await asyncio.get_running_loop().run_in_executor(None, P.derive_key, password)
+                   if password else None)
 
             pc = RTCPeerConnection(self.rtc_config)
             self.pc = pc
@@ -91,15 +96,24 @@ class ViewerClient:
             await pc.setLocalDescription(await pc.createOffer())
             sdp = pc.localDescription.sdp
             await send({"kind": "offer", "sdp": sdp,
-                        "auth": P.auth_tag(password, nonce, "viewer", sdp)})
+                        "auth": P.auth_tag(key, nonce, "viewer", sdp) if key else None})
             ans = await self._next_payload(ws, timeout)   # ממתין גם לאישור המשתמש
         if ans.get("kind") == "reject":
             await pc.close()
             raise ConnectError(ans.get("reason", "rejected"))
-        if ans.get("kind") != "answer" or not P.verify_tag(
-                password, nonce, "host", str(ans.get("sdp", "")), str(ans.get("auth", ""))):
+        # אם נשלחה סיסמה והמארח הכיר אותה - התשובה חתומה ומאומתת.
+        # אחרת (חיבור שאושר ע"י המשתמש) אין חתימה, ומסתמכים על קוד האבטחה.
+        self.mode = "interactive"
+        if ans.get("kind") != "answer":
             await pc.close()
-            raise ConnectError("host authentication failed")
+            raise ConnectError("protocol error")
+        if ans.get("auth"):
+            if key is None or not P.verify_tag(
+                    key, nonce, "host", str(ans.get("sdp", "")), str(ans["auth"])):
+                await pc.close()
+                raise ConnectError("host authentication failed")
+            self.mode = "unattended"
+        self.code = P.session_code(sdp, str(ans["sdp"]))
         await pc.setRemoteDescription(RTCSessionDescription(sdp=ans["sdp"], type="answer"))
         try:
             await asyncio.wait_for(self._hello.wait(), 30)
@@ -108,7 +122,8 @@ class ViewerClient:
             raise ConnectError("timed out waiting for host")
         self.connected = True
         self._tasks.append(asyncio.ensure_future(self._clipboard_loop()))
-        self.on_event("connected", monitors=self.monitors, perms=self.perms.to_json())
+        self.on_event("connected", monitors=self.monitors, perms=self.perms.to_json(),
+                      mode=self.mode, code=self.code)
 
     async def _expect(self, ws, typ: str, timeout: float) -> dict:
         while True:

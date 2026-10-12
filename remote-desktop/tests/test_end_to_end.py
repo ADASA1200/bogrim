@@ -43,7 +43,7 @@ async def env(tmp_path):
         return env.perms
 
     host = HostService(
-        url, "123456789", "secret-pass", screen=SyntheticScreen(),
+        url, "123456789", screen=SyntheticScreen(),
         injector=inj, clipboard=host_clip, approval=approve,
         on_event=lambda k, **kw: events.append((k, kw)),
         download_dir=tmp_path / "host_recv", rtc_config=make_rtc_config([]),
@@ -76,7 +76,7 @@ async def env(tmp_path):
 
 async def test_video_and_input(env):
     v = env.make_viewer()
-    await v.connect("123 456 789", "secret-pass")
+    await v.connect("123 456 789")
     assert v.connected and v.monitors[0]["width"] == 640
     assert await wait_for(lambda: v.frame_seq >= 3), "no video frames received"
     assert v.latest_frame.shape == (360, 640, 3)
@@ -92,10 +92,48 @@ async def test_video_and_input(env):
     assert ("release_all",) in env.inj.events
 
 
-async def test_wrong_password_rejected_and_blocked(env):
+async def test_id_only_waits_for_user_approval(env):
+    """בלי סיסמה: רק מזהה, והמשתמש מאשר."""
     v = env.make_viewer()
+    await v.connect("123456789")
+    assert len(env.approvals) == 1 and v.mode == "interactive"
+    await v.disconnect()
+
+
+async def test_password_ignored_when_host_has_no_unattended_password(env):
+    v = env.make_viewer()
+    await v.connect("123456789", "whatever")      # אין סיסמה קבועה: חוזרים לאישור
+    assert len(env.approvals) == 1 and v.mode == "interactive"
+    await v.disconnect()
+
+
+async def test_unattended_connects_without_approval(env):
+    async def must_not_ask(info):
+        raise AssertionError("approval dialog must not appear for unattended access")
+    env.host.approval = must_not_ask
+    env.host.set_unattended(P.derive_key("permanent-pass"), P.Permissions(files=False))
+    v = env.make_viewer()
+    await v.connect("123 456 789", "permanent-pass")      # מזהה + סיסמה קבועה
+    assert v.connected and v.mode == "unattended"
+    assert v.perms.control and not v.perms.files
+    assert any(k == "session_start" and kw["mode"] == "unattended" for k, kw in env.events)
+    assert await wait_for(lambda: v.frame_seq >= 2)
+    await v.disconnect()
+    assert await wait_for(lambda: env.host.session is None)
+
+
+async def test_unattended_enabled_but_no_password_still_asks(env):
+    env.host.set_unattended(P.derive_key("permanent-pass"))
+    v = env.make_viewer()
+    await v.connect("123456789")                     # בלי סיסמה -> אישור
+    assert len(env.approvals) == 1 and v.mode == "interactive"
+    await v.disconnect()
+
+
+async def test_wrong_unattended_password_rejected_and_blocked(env):
+    env.host.set_unattended(P.derive_key("permanent-pass"))
     with pytest.raises(ConnectError, match="bad password"):
-        await v.connect("123456789", "nope")
+        await env.make_viewer().connect("123456789", "permanent-pasS")
     assert env.approvals == []          # אפילו לא הגיע לחלון אישור
     for _ in range(P.MAX_AUTH_ATTEMPTS):
         try:
@@ -103,14 +141,34 @@ async def test_wrong_password_rejected_and_blocked(env):
         except ConnectError:
             pass
     with pytest.raises(ConnectError, match="blocked"):
-        await env.make_viewer().connect("123456789", "secret-pass")
+        await env.make_viewer().connect("123456789", "permanent-pass")
 
 
-async def test_user_declines(env):
+async def test_unattended_can_be_disabled(env):
+    env.host.set_unattended(P.derive_key("permanent-pass"))
+    env.host.set_unattended(None)
+    v = env.make_viewer()
+    await v.connect("123456789", "permanent-pass")   # הסיסמה כבר לא קיימת -> אישור
+    assert v.mode == "interactive" and len(env.approvals) == 1
+    await v.disconnect()
+
+
+async def test_user_declines_and_spam_block(env):
     async def decline(info): return None
     env.host.approval = decline
-    with pytest.raises(ConnectError, match="declined"):
-        await env.make_viewer().connect("123456789", "secret-pass")
+    for _ in range(3):
+        with pytest.raises(ConnectError, match="declined"):
+            await env.make_viewer().connect("123456789")
+    with pytest.raises(ConnectError, match="blocked"):
+        await env.make_viewer().connect("123456789")
+
+
+async def test_security_code_matches_on_both_sides(env):
+    v = env.make_viewer()
+    await v.connect("123456789")
+    host_code = next(kw["code"] for k, kw in env.events if k == "session_start")
+    assert v.code == host_code and len(v.code) == 7
+    await v.disconnect()
 
 
 async def test_unknown_host(env):
@@ -121,7 +179,7 @@ async def test_unknown_host(env):
 async def test_view_only_blocks_input(env):
     env.perms = P.Permissions(control=False)
     v = env.make_viewer()
-    await v.connect("123456789", "secret-pass")
+    await v.connect("123456789")
     assert not v.perms.control
     v._send({"t": "kd", "k": "x"})          # גם אם צופה זדוני עוקף את הלקוח
     await asyncio.sleep(0.5)
@@ -131,15 +189,15 @@ async def test_view_only_blocks_input(env):
 
 async def test_busy_second_viewer(env):
     v1 = env.make_viewer()
-    await v1.connect("123456789", "secret-pass")
+    await v1.connect("123456789")
     with pytest.raises(ConnectError, match="busy"):
-        await env.make_viewer().connect("123456789", "secret-pass")
+        await env.make_viewer().connect("123456789")
     await v1.disconnect()
 
 
 async def test_chat_clipboard_and_quality(env):
     v = env.make_viewer()
-    await v.connect("123456789", "secret-pass")
+    await v.connect("123456789")
     v.send_chat("שלום")
     assert await wait_for(lambda: ("chat", {"peer": env.host.session.peer, "text": "שלום"}) in env.events)
     env.host.send_chat("hi viewer")
@@ -159,7 +217,7 @@ async def test_chat_clipboard_and_quality(env):
 
 async def test_file_transfer_both_ways_and_path_traversal(env):
     v = env.make_viewer()
-    await v.connect("123456789", "secret-pass")
+    await v.connect("123456789")
     src = env.tmp / "../evil.bin"
     real = env.tmp / "data.bin"
     payload = bytes(range(256)) * 2000
@@ -178,7 +236,7 @@ async def test_file_transfer_both_ways_and_path_traversal(env):
 async def test_file_permission_denied(env):
     env.perms = P.Permissions(files=False)
     v = env.make_viewer()
-    await v.connect("123456789", "secret-pass")
+    await v.connect("123456789")
     f = env.tmp / "x.txt"; f.write_text("hi")
     await v.send_file(str(f))                # הלקוח חוסם לפי ההרשאות
     assert not (env.tmp / "host_recv" / "x.txt").exists()
@@ -195,3 +253,25 @@ def test_safe_name():
     assert safe_name("..\\..\\win\\x.exe") == "x.exe"
     assert safe_name("") == "file"
     assert safe_name("a:b?.txt") == "a_b_.txt"
+
+
+def test_config_unattended_roundtrip(tmp_path, monkeypatch):
+    from rdesk import config
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    cfg = {}
+    with pytest.raises(ValueError):
+        config.set_unattended(cfg, "short", P.Permissions())
+    key = config.set_unattended(cfg, "long-enough-pw", P.Permissions(files=False))
+    assert key == P.derive_key("long-enough-pw")
+    assert "long-enough-pw" not in (tmp_path / "config.json").read_text()   # לא נשמרת הסיסמה עצמה
+    key2, perms = config.get_unattended(config.load())
+    assert key2 == key and perms.files is False and perms.control is True
+    config.clear_unattended(cfg)
+    assert config.get_unattended(config.load())[0] is None
+
+
+def test_hebrew_reasons_cover_protocol_codes():
+    from rdesk import strings
+    for code in ("bad password", "declined", "busy", "blocked", "host not found / offline"):
+        assert any("א" <= c <= "ת" for c in strings.reason(code))

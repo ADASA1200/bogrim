@@ -29,11 +29,41 @@ def save(cfg: dict) -> None:
     tmp.replace(CONFIG_FILE)
 
 
-def host_identity(cfg: dict) -> tuple[str, str]:
-    """מזהה קבוע; סיסמה קבועה אם הוגדרה, אחרת חדשה בכל הפעלה."""
-    changed = False
+def host_identity(cfg: dict) -> str:
+    """מזהה קבוע (נוצר פעם אחת ונשמר)."""
     if not cfg.get("id"):
-        cfg["id"] = P.new_id(); changed = True
-    if changed:
+        cfg["id"] = P.new_id()
         save(cfg)
-    return cfg["id"], cfg.get("password") or P.new_password()
+    return cfg["id"]
+
+
+# ---- גישה ללא נוכחות -------------------------------------------------
+MIN_UNATTENDED_LEN = 8
+
+
+def get_unattended(cfg: dict) -> tuple[bytes | None, P.Permissions]:
+    u = cfg.get("unattended") or {}
+    perms = P.Permissions(**{k: bool(v) for k, v in (u.get("perms") or {}).items()
+                             if k in P.Permissions.__dataclass_fields__})
+    try:
+        key = bytes.fromhex(u["key"]) if u.get("key") else None
+    except ValueError:
+        key = None
+    return key, perms
+
+
+def set_unattended(cfg: dict, password: str | None, perms: P.Permissions) -> bytes | None:
+    """שומר מפתח נגזר (לא את הסיסמה עצמה). password=None משאיר את הסיסמה הקיימת ומעדכן הרשאות."""
+    u = cfg.setdefault("unattended", {})
+    if password is not None:
+        if len(password) < MIN_UNATTENDED_LEN:
+            raise ValueError("password too short")
+        u["key"] = P.derive_key(password).hex()
+    u["perms"] = perms.to_json()
+    save(cfg)
+    return get_unattended(cfg)[0]
+
+
+def clear_unattended(cfg: dict) -> None:
+    cfg.pop("unattended", None)
+    save(cfg)

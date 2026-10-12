@@ -8,9 +8,9 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 from PIL import Image, ImageTk
 
-from . import config, protocol as P
+from . import config, protocol as P, strings as S
 from .aio import AsyncRunner
-from .viewer import ConnectError, ViewerClient
+from .viewer import ViewerClient
 
 # keysym של tkinter -> שם מקש בפרוטוקול
 KEYSYM = {
@@ -33,6 +33,7 @@ PUNCT = {
     "numbersign": "#", "dollar": "$", "percent": "%", "asciicircum": "^",
     "ampersand": "&", "asterisk": "*", "parenleft": "(", "parenright": ")",
 }
+R = S.rtl
 BUTTON = {1: "left", 2: "middle", 3: "right"}
 CTRL_ALT = 0x4 | 0x20000 | 0x8   # Control, Alt (Windows), Mod1
 
@@ -56,8 +57,8 @@ class ViewerApp:
         self.events: queue.Queue = queue.Queue()
         self.client: ViewerClient | None = None
         self.root = tk.Tk()
-        self.root.title("RDesk - צופה")
-        self.root.geometry("440x300")
+        self.root.title(R(S.V_TITLE))
+        self.root.geometry("460x360")
         self._last_move = 0.0
         self._photo = None
         self._shown_seq = -1
@@ -70,31 +71,35 @@ class ViewerApp:
     def _build_connect(self) -> None:
         self.cf = ttk.Frame(self.root, padding=16)
         self.cf.pack(fill="both", expand=True)
-        ttk.Label(self.cf, text="חיבור למחשב מרוחק", font=("Segoe UI", 14, "bold")).grid(
+        self.cf.columnconfigure(0, weight=1)
+        ttk.Label(self.cf, text=R(S.V_HEADER), font=("Segoe UI", 14, "bold")).grid(
             row=0, column=0, columnspan=2, pady=(0, 10))
-        ttk.Label(self.cf, text="מזהה:").grid(row=1, column=0, sticky="w")
-        self.id_cb = ttk.Combobox(self.cf, values=self.cfg.get("recent", []), width=24)
-        self.id_cb.grid(row=1, column=1, pady=4)
-        ttk.Label(self.cf, text="סיסמה:").grid(row=2, column=0, sticky="w")
-        self.pw = ttk.Entry(self.cf, show="•", width=26)
-        self.pw.grid(row=2, column=1, pady=4)
-        ttk.Label(self.cf, text="שרת:").grid(row=3, column=0, sticky="w")
-        self.srv = ttk.Entry(self.cf, width=26)
+        ttk.Label(self.cf, text=R(S.V_ID)).grid(row=1, column=1, sticky="e")
+        self.id_cb = ttk.Combobox(self.cf, values=self.cfg.get("recent", []), width=26, justify="right")
+        self.id_cb.grid(row=1, column=0, pady=4, sticky="e")
+        ttk.Label(self.cf, text=R(S.V_PASSWORD)).grid(row=2, column=1, sticky="e")
+        self.pw = ttk.Entry(self.cf, show="•", width=28, justify="right")
+        self.pw.grid(row=2, column=0, pady=4, sticky="e")
+        ttk.Label(self.cf, text=R(S.V_PW_HINT), foreground="gray", justify="right",
+                  wraplength=400).grid(row=3, column=0, columnspan=2, sticky="e")
+        ttk.Label(self.cf, text=R(S.V_SERVER)).grid(row=4, column=1, sticky="e")
+        self.srv = ttk.Entry(self.cf, width=28)
         self.srv.insert(0, self.cfg.get("server", self.server))
-        self.srv.grid(row=3, column=1, pady=4)
-        self.btn = ttk.Button(self.cf, text="התחבר", command=self._connect)
-        self.btn.grid(row=4, column=0, columnspan=2, pady=10)
-        self.msg = ttk.Label(self.cf, text="", foreground="gray", wraplength=380)
-        self.msg.grid(row=5, column=0, columnspan=2)
+        self.srv.grid(row=4, column=0, pady=4, sticky="e")
+        self.btn = ttk.Button(self.cf, text=R(S.V_CONNECT), command=self._connect)
+        self.btn.grid(row=5, column=0, columnspan=2, pady=10)
+        self.msg = ttk.Label(self.cf, text="", foreground="gray", wraplength=400, justify="right")
+        self.msg.grid(row=6, column=0, columnspan=2)
+        self.id_cb.bind("<Return>", lambda e: self._connect())
         self.pw.bind("<Return>", lambda e: self._connect())
 
     def _connect(self) -> None:
         host_id, pw, srv = self.id_cb.get(), self.pw.get(), self.srv.get().strip()
-        if not P.clean_id(host_id) or not pw:
-            self.msg.configure(text="יש להזין מזהה וסיסמה", foreground="red")
+        if not P.clean_id(host_id):
+            self.msg.configure(text=R(S.V_NEED_FIELDS), foreground="red")
             return
         self.btn.state(["disabled"])
-        self.msg.configure(text="מתחבר... (ממתין לאישור המשתמש במחשב המרוחק)", foreground="gray")
+        self.msg.configure(text=R(S.V_CONNECTING if pw else S.V_WAIT_APPROVAL), foreground="gray")
         self.client = ViewerClient(
             srv, on_event=lambda k, **kw: self.events.put((k, kw)))
 
@@ -112,25 +117,27 @@ class ViewerApp:
         bar.pack(fill="x")
         self.bar = bar
         self.view_only = tk.BooleanVar(value=not self.client.perms.control)
-        ttk.Checkbutton(bar, text="צפייה בלבד", variable=self.view_only).pack(side="left", padx=4)
+        ttk.Checkbutton(bar, text=R(S.V_VIEW_ONLY), variable=self.view_only).pack(side="left", padx=4)
         if len(self.client.monitors) > 1:
             self.mon = ttk.Combobox(bar, state="readonly", width=16, values=[
-                f"צג {m['index']} ({m['width']}x{m['height']})" for m in self.client.monitors])
+                R(S.V_MONITOR.format(i=m['index'], w=m['width'], h=m['height'])) for m in self.client.monitors])
             self.mon.current(0)
             self.mon.bind("<<ComboboxSelected>>", self._on_monitor)
             self.mon.pack(side="left", padx=4)
-        ttk.Label(bar, text="איכות:").pack(side="left")
+        ttk.Label(bar, text=R(S.V_QUALITY)).pack(side="left")
         self.q = ttk.Combobox(bar, state="readonly", width=10,
-                              values=["גבוהה", "בינונית", "נמוכה"])
+                              values=[R(S.V_Q_HIGH), R(S.V_Q_MID), R(S.V_Q_LOW)])
         self.q.current(0)
         self.q.bind("<<ComboboxSelected>>", self._on_quality)
         self.q.pack(side="left", padx=4)
-        ttk.Button(bar, text="שלח קובץ", command=self._send_file).pack(side="left", padx=4)
-        ttk.Button(bar, text="צ'אט", command=self._toggle_chat).pack(side="left", padx=4)
-        ttk.Button(bar, text="מסך מלא", command=self._fullscreen).pack(side="left", padx=4)
-        ttk.Button(bar, text="נתק", command=self._disconnect).pack(side="right", padx=4)
+        ttk.Button(bar, text=R(S.V_SEND_FILE), command=self._send_file).pack(side="left", padx=4)
+        ttk.Button(bar, text=R(S.V_CHAT), command=self._toggle_chat).pack(side="left", padx=4)
+        ttk.Button(bar, text=R(S.V_FULLSCREEN), command=self._fullscreen).pack(side="left", padx=4)
+        ttk.Button(bar, text=R(S.V_DISCONNECT), command=self._disconnect).pack(side="right", padx=4)
         self.info = ttk.Label(bar, text="", foreground="gray")
         self.info.pack(side="right", padx=8)
+        self.code = ttk.Label(bar, text=R(S.V_CODE.format(code=self.client.code)), foreground="gray")
+        self.code.pack(side="right", padx=8)
 
         self.canvas = tk.Canvas(self.root, bg="black", highlightthickness=0, cursor="crosshair")
         self.canvas.pack(fill="both", expand=True)
@@ -200,22 +207,22 @@ class ViewerApp:
         if self.chat_win and self.chat_win.winfo_exists():
             self.chat_win.destroy(); return
         w = self.chat_win = tk.Toplevel(self.root)
-        w.title("צ'אט"); w.geometry("300x360")
+        w.title(R(S.V_CHAT_TITLE)); w.geometry("300x360")
         self.chat_log = scrolledtext.ScrolledText(w, state="disabled", height=14)
         self.chat_log.pack(fill="both", expand=True)
-        ent = ttk.Entry(w); ent.pack(fill="x")
+        ent = ttk.Entry(w, justify="right"); ent.pack(fill="x")
 
         def send(_e=None):
             t = ent.get().strip()
             if t:
                 self.runner.call(self.client.send_chat, t)
-                self._chat_line("אני: " + t); ent.delete(0, "end")
+                self._chat_line(S.V_ME + t); ent.delete(0, "end")
         ent.bind("<Return>", send)
 
     def _chat_line(self, line: str) -> None:
         if self.chat_win and self.chat_win.winfo_exists():
             self.chat_log.configure(state="normal")
-            self.chat_log.insert("end", line + "\n"); self.chat_log.see("end")
+            self.chat_log.insert("end", R(line) + "\n"); self.chat_log.see("end")
             self.chat_log.configure(state="disabled")
 
     def _disconnect(self) -> None:
@@ -267,24 +274,22 @@ class ViewerApp:
             config.save(self.cfg)
             self._build_session()
         elif kind == "connect_failed":
-            reasons = {"bad password": "סיסמה שגויה", "declined": "המשתמש במחשב המרוחק דחה את החיבור",
-                       "busy": "המחשב המרוחק עסוק בסשן אחר", "blocked": "נחסם זמנית עקב ניסיונות שגויים"}
             exc = kw["exc"]
-            text = reasons.get(str(exc), "החיבור נכשל: " + (str(exc) or type(exc).__name__))
-            self.msg.configure(text=text, foreground="red")
+            self.msg.configure(
+                text=R(S.V_FAILED + S.reason(str(exc) or type(exc).__name__)), foreground="red")
             self.btn.state(["!disabled"])
         elif kind == "chat":
-            self._chat_line("מארח: " + kw["text"])
+            self._chat_line(S.V_HOST + kw["text"])
         elif kind == "perms":
             if not kw["perms"]["control"]:
                 self.view_only.set(True)
         elif kind == "closed":
-            messagebox.showinfo("RDesk", "הסשן נסגר: " + str(kw.get("reason")))
+            messagebox.showinfo(S.V_CLOSED_TITLE, R(S.V_CLOSED + S.reason(kw.get("reason"))))
             self.root.destroy()
         elif kind == "file_received":
-            messagebox.showinfo("RDesk", "התקבל קובץ:\n" + kw["path"])
+            messagebox.showinfo(S.V_CLOSED_TITLE, R(S.V_FILE_IN) + kw["path"])
         elif kind == "file_error":
-            messagebox.showwarning("RDesk", "שגיאת העברת קובץ: " + str(kw.get("reason")))
+            messagebox.showwarning(S.V_CLOSED_TITLE, R(S.V_FILE_ERR + S.reason(kw.get("reason"))))
 
     def run(self) -> None:
         self.root.mainloop()

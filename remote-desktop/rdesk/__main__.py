@@ -1,32 +1,36 @@
-"""נקודת כניסה:  python -m rdesk {server|host|viewer} [אפשרויות]"""
+"""נקודת כניסה:  python -m rdesk {server|host|viewer|unattended} [אפשרויות]"""
 from __future__ import annotations
 
 import argparse
 import asyncio
+import getpass
 import logging
+import sys
 
-from . import config, protocol as P
+from . import config, protocol as P, strings as S
 
 
 def main(argv: list[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(prog="rdesk", description="RDesk - שליטה מרחוק")
+    ap = argparse.ArgumentParser(prog="rdesk", description=S.CLI_DESC)
+    ap.add_argument("-v", "--verbose", action="store_true")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    s = sub.add_parser("server", help="שרת איתות")
+    s = sub.add_parser("server", help=S.CLI_SERVER)
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8765)
     s.add_argument("--certfile"); s.add_argument("--keyfile")
 
-    h = sub.add_parser("host", help="המחשב שנשלט")
+    h = sub.add_parser("host", help=S.CLI_HOST)
     h.add_argument("--server", default=P.DEFAULT_SERVER)
-    h.add_argument("--headless", action="store_true", help="בלי ממשק גרפי")
-    h.add_argument("--unattended", action="store_true", help="ללא בקשת אישור (דורש --headless)")
-    h.add_argument("--turn", help="url,username,credential לשרת TURN")
+    h.add_argument("--headless", action="store_true", help=S.CLI_HEADLESS)
+    h.add_argument("--turn", help=S.CLI_TURN)
 
-    v = sub.add_parser("viewer", help="המחשב ששולט")
+    v = sub.add_parser("viewer", help=S.CLI_VIEWER)
     v.add_argument("--server", default=P.DEFAULT_SERVER)
 
-    ap.add_argument("-v", "--verbose", action="store_true")
+    u = sub.add_parser("unattended", help=S.CLI_SETPW)
+    u.add_argument("--off", action="store_true", help=S.CLI_CLEARPW)
+
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
 
@@ -39,31 +43,62 @@ def main(argv: list[str] | None = None) -> None:
         else:
             from .gui_host import HostApp
             HostApp(args.server).run()
+    elif args.cmd == "unattended":
+        _set_unattended(args.off)
     else:
         from .gui_viewer import ViewerApp
         ViewerApp(args.server).run()
 
 
+def _set_unattended(off: bool) -> None:
+    cfg = config.load()
+    if off:
+        config.clear_unattended(cfg)
+        print(S.CLI_PW_CLEARED)
+        return
+    pw = getpass.getpass(S.CLI_PW_PROMPT)
+    if len(pw) < config.MIN_UNATTENDED_LEN:
+        sys.exit(S.CLI_PW_SHORT)
+    if getpass.getpass(S.CLI_PW_AGAIN) != pw:
+        sys.exit(S.CLI_PW_MISMATCH)
+    _, perms = config.get_unattended(cfg)
+    config.set_unattended(cfg, pw, perms)
+    print(S.CLI_PW_SET)
+
+
+def _show(kind: str, **kw) -> None:
+    label = S.EV.get(kind, kind)
+    if kind == "session_start":
+        mode = "ללא אישור" if kw.get("mode") == "unattended" else "באישור המשתמש"
+        print(f"[{label}] {mode} · קוד אבטחה: {kw.get('code')}")
+    elif kind == "chat":
+        print(f"[{label}] {kw.get('text')}")
+    elif kind in ("status", "session_end", "file_sent", "file_received"):
+        print(f"[{label}] " + " ".join(f"{v}" for v in kw.values()))
+    elif kind in ("alert", "error", "file_error"):
+        print(f"[{label}] {S.reason(kw.get('reason', ''))}")
+
+
 async def _headless_host(args) -> None:
     from .host import HostService, make_rtc_config
     cfg = config.load()
-    hid, pw = config.host_identity(cfg)
+    hid = config.host_identity(cfg)
+    key, uperms = config.get_unattended(cfg)
     turn = None
     if args.turn:
         url, user, cred = args.turn.split(",", 2)
         turn = {"url": url, "username": user, "credential": cred}
 
     async def approval(info):
-        if args.unattended:
-            return P.Permissions()
         ans = await asyncio.get_running_loop().run_in_executor(
-            None, input, f"\n>> בקשת חיבור מ-{info['peer']}. לאשר? [y/N] ")
-        return P.Permissions() if ans.strip().lower() == "y" else None
+            None, input, S.CLI_ASK.format(peer=info["peer"]))
+        return P.Permissions() if ans.strip().lower() in S.CLI_YES else None
 
-    svc = HostService(args.server, hid, pw, approval=approval,
-                      on_event=lambda k, **kw: print(f"[{k}] {kw}"),
-                      rtc_config=make_rtc_config(turn=turn))
-    print(f"מזהה: {P.format_id(hid)}   סיסמה: {pw}")
+    svc = HostService(args.server, hid, approval=approval, on_event=_show,
+                      rtc_config=make_rtc_config(turn=turn),
+                      unattended_key=key, unattended_perms=uperms)
+    print(S.CLI_ID_LINE.format(id=P.format_id(hid)))
+    print(S.CLI_UNATT_ON if key else S.CLI_UNATT_OFF)
     await svc.run()
 
 

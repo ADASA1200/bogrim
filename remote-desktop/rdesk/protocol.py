@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
 import secrets
 from dataclasses import dataclass, asdict
 
@@ -39,19 +40,39 @@ def new_nonce() -> str:
     return secrets.token_hex(16)
 
 
-def auth_tag(password: str, nonce: str, role: str, sdp: str) -> str:
-    """חתימה על ה-SDP (כולל טביעת האצבע של DTLS) באמצעות הסיסמה.
+def derive_key(password: str) -> bytes:
+    """מפתח משותף מהסיסמה (PBKDF2). אפשר לשמור אותו בדיסק במקום הסיסמה עצמה."""
+    return hashlib.pbkdf2_hmac("sha256", password.encode(), b"rdesk-v1", 200_000)
+
+
+def auth_tag(key: bytes, nonce: str, role: str, sdp: str) -> str:
+    """חתימה על ה-SDP (כולל טביעת האצבע של DTLS) באמצעות מפתח הסיסמה.
 
     כך גם שרת איתות עוין לא יכול לבצע MITM: בלי הסיסמה הוא לא יכול לזייף
     offer / answer עם טביעת אצבע משלו.
     """
-    key = hashlib.sha256(("rdesk-v1:" + password).encode()).digest()
     msg = f"{role}\n{nonce}\n{sdp}".encode()
     return hmac.new(key, msg, hashlib.sha256).hexdigest()
 
 
-def verify_tag(password: str, nonce: str, role: str, sdp: str, tag: str) -> bool:
-    return hmac.compare_digest(auth_tag(password, nonce, role, sdp), tag or "")
+def verify_tag(key: bytes, nonce: str, role: str, sdp: str, tag: str) -> bool:
+    return hmac.compare_digest(auth_tag(key, nonce, role, sdp), tag or "")
+
+
+def _fingerprint(sdp: str) -> str:
+    m = re.search(r"a=fingerprint:sha-256 ([0-9A-Fa-f:]+)", sdp)
+    return m.group(1).upper() if m else ""
+
+
+def session_code(offer_sdp: str, answer_sdp: str) -> str:
+    """קוד בן 6 ספרות שנגזר מטביעות האצבע של שני הצדדים.
+
+    שני הצדדים מחשבים אותו בנפרד ממה שהם ראו. אם שרת איתות עוין החליף SDP
+    (MITM) - הקודים יהיו שונים. אפשר להשוות אותם בעל-פה.
+    """
+    h = hashlib.sha256((_fingerprint(offer_sdp) + "|" + _fingerprint(answer_sdp)).encode()).digest()
+    n = int.from_bytes(h[:4], "big") % 1_000_000
+    return f"{n:06d}"[:3] + " " + f"{n:06d}"[3:]
 
 
 @dataclass
