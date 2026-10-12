@@ -7,6 +7,11 @@ on:
   workflow_dispatch:
   push:
     tags: ["v*"]
+    # ירוץ אוטומטית בדחיפה לענף הפיתוח (גם לפני שהקובץ נמצא בענף הראשי)
+    branches: ["claude/**"]
+    paths:
+      - "remote-desktop/**"
+      - ".github/workflows/build-windows-exe.yml"
 
 jobs:
   exe:

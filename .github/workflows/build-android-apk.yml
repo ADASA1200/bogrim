@@ -6,6 +6,10 @@ on:
   workflow_dispatch:
   push:
     tags: ["v*"]
+    branches: ["claude/**"]
+    paths:
+      - "android/**"
+      - ".github/workflows/build-android-apk.yml"
 
 jobs:
   apk:
