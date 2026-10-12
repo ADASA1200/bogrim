@@ -17,6 +17,7 @@ def main(argv: list[str] | None = None) -> None:
 
     a = sub.add_parser("app", help=S.CLI_APP)
     a.add_argument("--server")
+    a.add_argument("--legacy-ui", action="store_true", help=S.CLI_LEGACY_UI)
 
     s = sub.add_parser("server", help=S.CLI_SERVER)
     s.add_argument("--host", default="127.0.0.1")
@@ -26,12 +27,14 @@ def main(argv: list[str] | None = None) -> None:
     h = sub.add_parser("host", help=S.CLI_HOST)
     h.add_argument("--server")
     h.add_argument("--headless", action="store_true", help=S.CLI_HEADLESS)
+    h.add_argument("--legacy-ui", action="store_true", help=S.CLI_LEGACY_UI)
     h.add_argument("--turn", help=S.CLI_TURN)
     h.add_argument("--serve-signaling", nargs="?", const=-1, type=int, metavar="PORT",
                    help=S.CLI_SERVE_SIGNALING)
 
     v = sub.add_parser("viewer", help=S.CLI_VIEWER)
     v.add_argument("--server")
+    v.add_argument("--legacy-ui", action="store_true", help=S.CLI_LEGACY_UI)
 
     u = sub.add_parser("unattended", help=S.CLI_SETPW)
     u.add_argument("--off", action="store_true", help=S.CLI_CLEARPW)
@@ -41,8 +44,7 @@ def main(argv: list[str] | None = None) -> None:
     net.use_system_trust_store()
 
     if args.cmd in (None, "app"):
-        from .gui_host import HostApp
-        HostApp(getattr(args, "server", None)).run()
+        _run_host_ui(getattr(args, "server", None), getattr(args, "legacy_ui", False))
     elif args.cmd == "server":
         from .signaling_server import run_forever
         asyncio.run(run_forever(args.host, args.port, args.certfile, args.keyfile))
@@ -50,13 +52,41 @@ def main(argv: list[str] | None = None) -> None:
         if args.headless:
             asyncio.run(_headless_host(args))
         else:
-            from .gui_host import HostApp
-            HostApp(args.server).run()
+            _run_host_ui(args.server, args.legacy_ui)
     elif args.cmd == "unattended":
         _set_unattended(args.off)
     else:
+        _run_viewer_ui(args.server, args.legacy_ui)
+
+
+def _run_host_ui(server: str | None, legacy: bool) -> None:
+    if legacy:
+        from .gui_host import HostApp
+        HostApp(server).run()
+        return
+    try:
+        from .webapp import run_app
+        run_app(server)
+    except Exception:
+        logging.getLogger("rdesk").exception(
+            "נכשלה הפעלת ממשק ה-React (pywebview); נופל לממשק הישן (tkinter)")
+        from .gui_host import HostApp
+        HostApp(server).run()
+
+
+def _run_viewer_ui(server: str | None, legacy: bool) -> None:
+    if legacy:
         from .gui_viewer import ViewerApp
-        ViewerApp(args.server).run()
+        ViewerApp(server).run()
+        return
+    try:
+        from .webapp import run_viewer
+        run_viewer(server)
+    except Exception:
+        logging.getLogger("rdesk").exception(
+            "נכשלה הפעלת ממשק ה-React (pywebview); נופל לממשק הישן (tkinter)")
+        from .gui_viewer import ViewerApp
+        ViewerApp(server).run()
 
 
 def _setup_logging(verbose: bool) -> None:

@@ -4,6 +4,11 @@
 וידאו, עכבר, מקלדת, לוח, קבצים וצ'אט עוברים **ישירות בין המחשבים (P2P)**, מוצפנים (DTLS‑SRTP),
 והשרת משמש רק לאיתות (הכרות בין שני הצדדים).
 
+**הממשק הוא דף React** שרץ בתוך חלון דפדפן מקומי ([pywebview](https://pywebview.flowrs.dev/))
+ולא Tkinter - RTL עברי תקין ומעוצב, בלי ה"האק" שהיה נדרש עם Tk. כל לוגיקת הליבה (חיבור, הצפנה,
+לכידת מסך, הזרקת קלט) נשארת ב-Python בדיוק כפי שהייתה; רק שכבת התצוגה חדשה.
+ל-tkinter הישן יש fallback: `--legacy-ui`.
+
 ```
  צופה  ───── שרת איתות (WebSocket, הודעות SDP בלבד) ─────  מארח
    └────────── חיבור P2P מוצפן (STUN) / TURN כגיבוי ─────────┘
@@ -65,7 +70,7 @@
 | סנכרון לוח גזירים דו‑כיווני | ✅ |
 | העברת קבצים דו‑כיוונית (עם התקדמות) | ✅ |
 | צ'אט | ✅ |
-| ממשק ופקודות **בעברית מלאה** (RTL) | ✅ |
+| ממשק **React, בעברית מלאה ו-RTL תקין** (לא Tkinter), בתוך חלון דפדפן מקומי | ✅ |
 | רשימת חיבורים אחרונים | ✅ |
 | חסימה זמנית אחרי ניסיונות סיסמה שגויים ואחרי הצפת בקשות אישור | ✅ |
 | חיבור דרך NAT (STUN) ו‑TURN כגיבוי | ✅ |
@@ -76,12 +81,16 @@
 
 ```bash
 cd remote-desktop
-pip install -r requirements.txt      # Python 3.10+, ‏tkinter מגיע עם Python ב-Windows
+pip install -r requirements.txt      # Python 3.10+
+cd webui && npm ci && npm run build && cd ..    # בונה את ממשק ה-React (חד-פעמי; מתעדכן אחרי כל שינוי ב-webui/src)
 ```
+**Windows:** ה-UI רץ בתוך WebView2 (מגיע מובנה ב-Windows 11 ומותקן אוטומטית ע"י Edge ב-Windows 10 - כמעט
+תמיד כבר קיים). **Linux:** צריך `gir1.2-webkit2-4.1` ו-`gir1.2-gtk-3.0` (`apt install`).
 
 ## הרצה
 
-1. **שרת איתות** (על מחשב נגיש לשני הצדדים; בבדיקה מקומית – אותו מחשב):
+1. **שרת איתות** (על מחשב נגיש לשני הצדדים; בבדיקה מקומית – אותו מחשב; או ראו
+   "מצב בלי שרת נפרד" למטה כדי לוותר על השלב הזה לגמרי):
    ```bash
    python -m rdesk server --host 0.0.0.0 --port 8765
    ```
@@ -89,15 +98,15 @@ pip install -r requirements.txt      # Python 3.10+, ‏tkinter מגיע עם Py
    ```bash
    python -m rdesk host --server ws://SERVER_IP:8765
    ```
-   יוצג המזהה. בחלון "גישה ללא נוכחות" אפשר להגדיר סיסמה קבועה (לפחות 8 תווים) ולבחור אילו הרשאות יינתנו למי שמתחבר איתה.
+   יוצג המזהה. בלשונית "הגדרות" אפשר להגדיר סיסמה קבועה לגישה ללא נוכחות (לפחות 8 תווים)
+   ולבחור אילו הרשאות יינתנו למי שמתחבר איתה.
    בלי ממשק גרפי: `--headless`; את הסיסמה הקבועה מגדירים עם `python -m rdesk unattended` (וכיבוי עם `--off`).
 3. **במחשב ממנו שולטים (צופה):** בלי פקודה, `python -m rdesk` פותח את **האפליקציה המלאה** (כמו ה-EXE):
    חלון אחד עם המזהה שלכם (כמארח), תיבת "התחברות למחשב אחר", ולשונית הגדרות (גישה ללא נוכחות ושרת).
    מקלידים מזהה (סיסמה היא אופציונלית) ולוחצים "התחבר". אפשר גם `python -m rdesk viewer` לצופה בלבד.
 
 הגדרות נשמרות ב-`~/.rdesk/config.json`. אם אין STUN זמין (רשת פנימית), `RDESK_STUN=""` מדלג עליו ומאיץ את ההתחברות.
-
-> **עברית ב-Linux:** ל-Tk ב-Linux אין תמיכה ב-RTL, ולכן `pip install python-bidi` מסדר את התצוגה אוטומטית. ב-Windows לא צריך.
+הוסיפו `--legacy-ui` לכל אחת מהפקודות האלה כדי להריץ את ממשק ה-Tkinter הישן במקום ה-React.
 
 ### פריסה לאינטרנט
 - הריצו את שרת האיתות מאחורי TLS (`--certfile/--keyfile` או reverse proxy) וחברו עם `wss://`.
@@ -106,11 +115,20 @@ pip install -r requirements.txt      # Python 3.10+, ‏tkinter מגיע עם Py
 
 ### בניית קובץ EXE ל-Windows
 ```bash
+cd webui && npm ci && npm run build && cd ..
 pip install pyinstaller
-pyinstaller --onefile --windowed --name RDesk-Host   run_host.py
-pyinstaller --onefile --windowed --name RDesk-Viewer run_viewer.py
+python build_exe.py
 ```
-שנו את `DEFAULT_SERVER` ב-`rdesk/protocol.py` לכתובת השרת שלכם לפני הבנייה.
+build_exe.py בודק ש-`webui/dist` קיים, אורז אותו לתוך ה-EXE, ומגדיר את ה-`--collect-all` הדרושים
+ל-pywebview/aiortc/sv_ttk. שנו את `DEFAULT_SERVER` ב-`rdesk/protocol.py` לכתובת השרת שלכם לפני הבנייה,
+או השתמשו במשתנה `RDESK_SERVER` ב-GitHub Actions (ראו `.github/workflows/build-windows-exe.yml`).
+
+### פיתוח הממשק (React)
+```bash
+cd webui && npm run dev
+```
+פותח שרת פיתוח עם hot-reload בכתובת `http://localhost:5173` (עם נתוני דמה - בלי pywebview אמיתי).
+כדי לבדוק מול ה-backend האמיתי צריך לבנות (`npm run build`) ולהריץ את `python -m rdesk`.
 
 ## חיבור ברשת עם סינון/בקרת תוכן
 
@@ -144,13 +162,15 @@ root משלה (בדיוק כפי שדפדפנים "סתם עובדים" איתה
 
 ## בדיקות
 ```bash
-python -m pytest -q              # 21 בדיקות, כולל תאימות מול Chromium (דורש node + playwright, אחרת מדלג)
+python -m pytest -q              # 31 בדיקות (צריך pywebview מותקן בשביל test_webapp.py)
 cd ../android && ./gradlew testDebugUnitTest   # 7 בדיקות: ה-Kotlin מול וקטורים שנוצרו ב-Python
 ```
-בדיקות ה-`test_browser_interop` מריצות צופה ב-Chromium (אותו libwebrtc כמו באנדרואיד) מול המארח האמיתי,
-ומוכיחות שהפרוטוקול (SDP חתום, קוד אבטחה, ערוצי נתונים, קבצים) עובד בין מימושים שונים.
+בדיקות ה-`test_browser_interop` מריצות צופה ב-Chromium (אותו libwebrtc כמו באנדרואיד) מול המארח האמיתי
+(דורש node + playwright, אחרת מדלג). בדיקות ה-`test_webapp` מריצות את הגשר של React (HostAPI/ViewerAPI)
+מקצה לקצה - אישור, הקמת WebRTC, הזרמת וידאו, צ'אט, הרשאות, ניתוק - בלי חלון אמיתי (push מוקלט במקום
+evaluate_js). בדיקה נפרדת, ידנית, עם WebKitGTK/WebView2 אמיתי ושני חלונות ממש, אימתה גם את זה.
 
-18 בדיקות מקצה לקצה (בלי תצוגה גרפית): חיבור באישור, גישה ללא נוכחות, סיסמה שגויה וחסימה,
+18 בדיקות מקצה לקצה נוספות (בלי תצוגה גרפית): חיבור באישור, גישה ללא נוכחות, סיסמה שגויה וחסימה,
 דחייה והצפה, קוד אבטחה, צפייה בלבד, שני צופים (busy), צ'אט, לוח, איכות, קבצים והרשאות, ושמירת הגדרות.
 
 ## מבנה
@@ -162,7 +182,10 @@ rdesk/embedded.py        מצב "בלי שרת נפרד" - שרת איתות ב�
 rdesk/capture.py          לכידת מסך → וידאו
 rdesk/inject.py           הזרקת עכבר/מקלדת
 rdesk/files.py, clipboard.py
-rdesk/gui_host.py, gui_viewer.py   ממשקי tkinter (האפליקציה המלאה)
+rdesk/net.py              אמון בחנות התעודות של מערכת ההפעלה (truststore)
+rdesk/webapp.py           הגשר בין React ל-Python (pywebview) - ה-UI הנוכחי
+rdesk/gui_host.py, gui_viewer.py, theme.py   ממשק Tkinter ישן (‎--legacy-ui בלבד)
+webui/                    קוד המקור של ממשק ה-React (Vite); npm run build -> webui/dist (לא ב-git)
 build_exe.py, run_app.py  בניית RDesk.exe
 ../android/               אפליקציית אנדרואיד (Kotlin + WebRTC)
 ../.github/workflows/     בנייה אוטומטית של ה-EXE וה-APK
