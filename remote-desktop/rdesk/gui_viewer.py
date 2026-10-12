@@ -8,7 +8,7 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 from PIL import Image, ImageTk
 
-from . import config, protocol as P, strings as S
+from . import config, protocol as P, strings as S, theme
 from .aio import AsyncRunner
 from .viewer import ViewerClient
 
@@ -60,6 +60,7 @@ class ViewerApp:
         self.client: ViewerClient | None = None
         self.master = master
         self.root = tk.Toplevel(master) if master is not None else tk.Tk()
+        theme.apply(self.root)   # לא עושה כלום אם master is not None (Toplevel יורש מה-root)
         self.root.title(R(S.V_TITLE))
         self.root.geometry("460x360")
         self._last_move = 0.0
@@ -214,8 +215,10 @@ class ViewerApp:
         if self.chat_win and self.chat_win.winfo_exists():
             self.chat_win.destroy(); return
         w = self.chat_win = tk.Toplevel(self.root)
+        theme.style_toplevel(w)
         w.title(R(S.V_CHAT_TITLE)); w.geometry("300x360")
         self.chat_log = scrolledtext.ScrolledText(w, state="disabled", height=14)
+        theme.style_classic(self.chat_log)
         self.chat_log.pack(fill="both", expand=True)
         ent = ttk.Entry(w, justify="right"); ent.pack(fill="x")
 

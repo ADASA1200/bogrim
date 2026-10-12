@@ -6,7 +6,7 @@ import queue
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
-from . import config, embedded as E, protocol as P, strings as S
+from . import config, embedded as E, protocol as P, strings as S, theme
 from .aio import AsyncRunner
 from .host import HostService
 from .gui_viewer import ViewerApp
@@ -35,8 +35,9 @@ class HostApp:
             on_event=lambda k, **kw: self.events.put((k, kw)),
             unattended_key=key, unattended_perms=uperms)
         self.root = tk.Tk()
+        theme.apply(self.root)
         self.root.title(R(S.H_TITLE))
-        self.root.geometry("480x720")
+        self.root.geometry("540x780")
         self._build(key is not None, uperms, emb_on, emb_port)
         self.runner.submit(self._start_and_run(emb_on, emb_port))
         self.root.after(100, self._poll)
@@ -106,7 +107,7 @@ class HostApp:
         sb.pack(fill="x", padx=10, pady=8)
         srow = ttk.Frame(sb); srow.pack(fill="x", padx=6, pady=6)
         ttk.Label(srow, text=R(S.H_SERVER_LABEL)).pack(side="right")
-        self.srv = ttk.Entry(srow, width=30)
+        self.srv = ttk.Entry(srow, width=24)
         self.srv.insert(0, self.server)
         self.srv.pack(side="right", padx=6)
         ttk.Button(srow, text=R(S.H_SERVER_SAVE), command=self._save_server).pack(side="left")
@@ -145,6 +146,7 @@ class HostApp:
         ttk.Button(row2, text=R(S.H_SEND_FILE), command=self._send_file).pack(side="right")
         ttk.Button(row2, text=R(S.H_DISCONNECT), command=self._disconnect).pack(side="left")
         self.chat = scrolledtext.ScrolledText(self.sess, height=7, state="disabled")
+        theme.style_classic(self.chat)
         self.chat.pack(fill="both", expand=True, padx=6, pady=4)
         self.entry = ttk.Entry(self.sess, justify="right")
         self.entry.pack(fill="x", padx=6, pady=(0, 6))
@@ -290,6 +292,7 @@ class HostApp:
 
     def _ask_dialog(self, fut, loop) -> None:
         dlg = tk.Toplevel(self.root)
+        theme.style_toplevel(dlg)
         dlg.title(R(S.H_ASK_TITLE))
         dlg.attributes("-topmost", True)
         dlg.geometry(f"+{self.root.winfo_rootx() + 40}+{self.root.winfo_rooty() + 60}")

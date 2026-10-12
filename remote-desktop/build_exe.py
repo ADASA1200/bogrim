@@ -6,7 +6,8 @@
 import subprocess
 import sys
 
-COLLECT_ALL = ["aiortc", "aioice", "pylibsrtp", "av", "pyee", "google_crc32c"]
+COLLECT_ALL = ["aiortc", "aioice", "pylibsrtp", "av", "pyee", "google_crc32c",
+               "sv_ttk", "darkdetect"]   # sv_ttk: קבצי .tcl/.png שחייבים להיארז כ-data
 SUBMODULES = ["pynput", "mss", "websockets", "rdesk"]
 if sys.platform.startswith("linux"):
     SUBMODULES.append("Xlib")     # backend של pynput ב-X11
