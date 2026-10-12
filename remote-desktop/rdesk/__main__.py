@@ -7,7 +7,7 @@ import getpass
 import logging
 import sys
 
-from . import config, protocol as P, strings as S
+from . import config, net, protocol as P, strings as S
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -38,6 +38,7 @@ def main(argv: list[str] | None = None) -> None:
 
     args = ap.parse_args(argv)
     _setup_logging(args.verbose)
+    net.use_system_trust_store()
 
     if args.cmd in (None, "app"):
         from .gui_host import HostApp

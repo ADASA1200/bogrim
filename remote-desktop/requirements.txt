@@ -4,8 +4,9 @@ mss>=9
 pynput>=1.7
 pyperclip>=1.8
 Pillow>=10
-sv-ttk>=2.6.0        # עיצוב מודרני ל-tkinter (Sun Valley / Windows 11)
 numpy>=1.26
+truststore>=0.9      # אמון בחנות התעודות של מערכת ההפעלה ל-wss:// (לא משבית אימות)
+pywebview>=6.0       # חלון דפדפן מקומי לממשק ה-React
 python-bidi>=0.4; sys_platform == "linux"   # עברית תקינה ב-Tk של Linux
 # לבדיקות בלבד:
 pytest>=8
