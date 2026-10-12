@@ -19,6 +19,7 @@ import webview
 
 from . import config, embedded as E, protocol as P
 from .aio import AsyncRunner
+from .clipboard import Clipboard
 from .host import HostService
 from .viewer import ViewerClient
 
@@ -55,6 +56,13 @@ class _WindowPusher:
 
     def __init__(self) -> None:
         self.win: webview.Window | None = None
+        self._clipboard = Clipboard()
+
+    def getClipboardText(self) -> str:
+        """לחיצה ימנית על שדה טקסט מדביקה ישירות (ראו Input ב-webui) - קוראים
+        את לוח הגזירים של המערכת כאן כי זה אמין יותר מה-Clipboard API של
+        הדפדפן, שחסום/חלקי בחלק מגרסאות WebKitGTK."""
+        return self._clipboard.get() or ""
 
     def push(self, kind: str, data=None) -> None:
         win = self.win

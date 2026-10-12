@@ -1,5 +1,34 @@
 import { useEffect, useState } from "react";
-import { copyToClipboard } from "../bridge";
+import { callApi, copyToClipboard } from "../bridge";
+
+// לחיצה ימנית על כל שדה טקסט מדביקה ישירות, בלי תפריט - נוח יותר כשמעתיקים
+// מזהה/סיסמה/כתובת שרת. קוראים את הלוח דרך פייתון (פיברוך cross-platform;
+// ה-Clipboard API של הדפדפן לא תמיד זמין/מורשה בתוך webview).
+async function pasteOnContextMenu(e) {
+  e.preventDefault();
+  const el = e.currentTarget;
+  let text = "";
+  try {
+    text = await callApi("getClipboardText");
+  } catch {
+    return;
+  }
+  if (!text) return;
+  const proto = el.tagName === "TEXTAREA" ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+  const start = el.selectionStart ?? el.value.length;
+  const end = el.selectionEnd ?? el.value.length;
+  setter.call(el, el.value.slice(0, start) + text + el.value.slice(end));
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  const pos = start + text.length;
+  requestAnimationFrame(() => {
+    try {
+      el.setSelectionRange(pos, pos);
+    } catch {
+      /* שדות מסוג password/number לא תומכים ב-setSelectionRange בכל הדפדפנים */
+    }
+  });
+}
 
 export function Card({ title, right, children }) {
   return (
@@ -62,8 +91,14 @@ export function Field({ label, children }) {
   );
 }
 
-export function Input({ dir, ...rest }) {
-  return <input {...rest} dir={dir} className={`input ${rest.className || ""}`} />;
+export function Input({ dir, onContextMenu, ...rest }) {
+  const handleContextMenu = (e) => {
+    pasteOnContextMenu(e);
+    onContextMenu?.(e);
+  };
+  return (
+    <input {...rest} dir={dir} onContextMenu={handleContextMenu} className={`input ${rest.className || ""}`} />
+  );
 }
 
 export function Checkbox({ label, disabled, ...rest }) {

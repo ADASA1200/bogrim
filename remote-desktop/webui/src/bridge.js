@@ -49,6 +49,7 @@ async function mockCall(method, args) {
       embedded: { enabled: true, port: 8765, lanIp: "192.168.1.50", publicIp: "203.0.113.7", connections: 1 },
       session: null,
     }),
+    getClipboardText: () => "דוגמה שהודבקה מהלוח",
   };
   await new Promise((r) => setTimeout(r, 150));
   return mocks[method] ? mocks[method]() : null;

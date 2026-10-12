@@ -134,3 +134,13 @@ def test_set_unattended_validation(host_api):
     s = host_api.getState()
     assert s["unattended"]["enabled"] is True
     assert s["unattended"]["clipboard"] is False
+
+
+def test_get_clipboard_text(host_api, monkeypatch):
+    monkeypatch.setattr(host_api._clipboard, "get", lambda: "hello from clipboard")
+    assert host_api.getClipboardText() == "hello from clipboard"
+
+
+def test_get_clipboard_text_empty_when_none(host_api, monkeypatch):
+    monkeypatch.setattr(host_api._clipboard, "get", lambda: None)
+    assert host_api.getClipboardText() == ""

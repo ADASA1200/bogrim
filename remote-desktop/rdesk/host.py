@@ -93,24 +93,39 @@ class HostService:
 
     # ------------------------------------------------------------ איתות
     async def run(self) -> None:
-        """רץ לנצח: מתחבר לשרת האיתות ומתחבר מחדש בנפילה."""
+        """רץ לנצח: מתחבר לשרת האיתות ומתחבר מחדש בנפילה, עם backoff מתרחב."""
+        backoff = 1.0
         while not self._stop.is_set():
+            # לא מדווחים "אין חיבור" על הפסקה של כמה שניות שמתאוששת לבד -
+            # רק אם ההתנתקות נמשכת באמת (ראו _delayed_offline).
+            offline_task = asyncio.ensure_future(self._delayed_offline())
             try:
                 async with websockets.connect(self.server_url, max_size=P.MAX_SIGNAL_BYTES) as ws:
                     self.ws = ws
                     await ws.send(P.dumps({"type": "register", "id": self.id}))
+                    offline_task.cancel()
+                    backoff = 1.0   # התחברנו בהצלחה - איפוס זמן ההמתנה לניסיון הבא
                     async for raw in ws:
                         # כל הודעה בטסק נפרד: חלון האישור לא חוסם הודעות אחרות
                         asyncio.ensure_future(self._on_signal(P.loads(raw)))
             except (OSError, websockets.WebSocketException) as e:
                 log.warning("signaling connection lost: %s", e)
+            finally:
+                offline_task.cancel()
             self.ws = None
             self.registered.clear()
-            self.on_event("status", online=False)
             try:
-                await asyncio.wait_for(self._stop.wait(), 3)
+                await asyncio.wait_for(self._stop.wait(), backoff)
             except asyncio.TimeoutError:
                 pass
+            backoff = min(backoff * 2, 15.0)
+
+    async def _delayed_offline(self) -> None:
+        try:
+            await asyncio.sleep(3)
+            self.on_event("status", online=False)
+        except asyncio.CancelledError:
+            pass
 
     async def stop(self) -> None:
         self._stop.set()
