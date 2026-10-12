@@ -67,3 +67,8 @@ def set_unattended(cfg: dict, password: str | None, perms: P.Permissions) -> byt
 def clear_unattended(cfg: dict) -> None:
     cfg.pop("unattended", None)
     save(cfg)
+
+
+def server_url(arg: str | None = None) -> str:
+    """עדיפות: פרמטר מפורש > הגדרות משתמש > ברירת המחדל."""
+    return arg or load().get("server") or P.DEFAULT_SERVER

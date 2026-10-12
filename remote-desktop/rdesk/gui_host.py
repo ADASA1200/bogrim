@@ -9,14 +9,17 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk
 from . import config, protocol as P, strings as S
 from .aio import AsyncRunner
 from .host import HostService
+from .gui_viewer import ViewerApp
 
 APPROVAL_TIMEOUT = 30
 R = S.rtl
 
 
 class HostApp:
-    def __init__(self, server: str, runner: AsyncRunner | None = None) -> None:
+    def __init__(self, server: str | None = None, runner: AsyncRunner | None = None) -> None:
         self.cfg = config.load()
+        server = config.server_url(server)
+        self.server = server
         self.runner = runner or AsyncRunner()
         self.id = config.host_identity(self.cfg)
         key, uperms = config.get_unattended(self.cfg)
@@ -27,7 +30,7 @@ class HostApp:
             unattended_key=key, unattended_perms=uperms)
         self.root = tk.Tk()
         self.root.title(R(S.H_TITLE))
-        self.root.geometry("460x680")
+        self.root.geometry("480x720")
         self._build(key is not None, uperms)
         self.runner.submit(self.service.run())
         self.root.after(100, self._poll)
@@ -35,7 +38,11 @@ class HostApp:
 
     # ---------------------------------------------------------------- UI
     def _build(self, unatt_on: bool, up: P.Permissions) -> None:
-        r = self.root
+        nb = ttk.Notebook(self.root)
+        nb.pack(fill="both", expand=True)
+        r, st = ttk.Frame(nb), ttk.Frame(nb)
+        nb.add(r, text=R(S.H_TAB_MAIN))
+        nb.add(st, text=R(S.H_TAB_SETTINGS))
         top = ttk.LabelFrame(r, text=R(S.H_MY_PC))
         top.pack(fill="x", padx=10, pady=8)
         row = ttk.Frame(top); row.pack(fill="x", padx=6, pady=4)
@@ -48,8 +55,25 @@ class HostApp:
         ttk.Label(top, text=R(S.H_TEMP_NOTE), foreground="gray",
                   wraplength=400, justify="right").pack(anchor="e", padx=6, pady=(0, 6))
 
-        # ---- גישה ללא נוכחות ----
-        ub = ttk.LabelFrame(r, text=R(S.H_UNATT_BOX))
+        # ---- התחברות למחשב אחר ----
+        cb = ttk.LabelFrame(r, text=R(S.H_CONNECT_BOX))
+        cb.pack(fill="x", padx=10, pady=4)
+        row = ttk.Frame(cb); row.pack(fill="x", padx=6, pady=4)
+        ttk.Label(row, text=R(S.V_ID)).pack(side="right")
+        self.c_id = ttk.Combobox(row, values=self.cfg.get("recent", []), width=20, justify="right")
+        self.c_id.pack(side="right", padx=6)
+        self.c_id.bind("<Return>", lambda e: self._connect_remote())
+        ttk.Button(row, text=R(S.V_CONNECT), command=self._connect_remote).pack(side="left")
+        row = ttk.Frame(cb); row.pack(fill="x", padx=6)
+        ttk.Label(row, text=R(S.V_PASSWORD)).pack(side="right")
+        self.c_pw = ttk.Entry(row, show="•", width=22, justify="right")
+        self.c_pw.pack(side="right", padx=6)
+        self.c_pw.bind("<Return>", lambda e: self._connect_remote())
+        ttk.Label(cb, text=R(S.V_PW_HINT), foreground="gray", justify="right",
+                  wraplength=420).pack(anchor="e", padx=6, pady=(2, 6))
+
+        # ---- גישה ללא נוכחות (בלשונית ההגדרות) ----
+        ub = ttk.LabelFrame(st, text=R(S.H_UNATT_BOX))
         ub.pack(fill="x", padx=10, pady=4)
         self.u_on = tk.BooleanVar(value=unatt_on)
         ttk.Checkbutton(ub, text=R(S.H_UNATT_ENABLE), variable=self.u_on).pack(anchor="e", padx=6, pady=2)
@@ -66,6 +90,17 @@ class HostApp:
                           (S.H_PERM_CONTROL, self.u_control)):
             ttk.Checkbutton(prm, text=R(text), variable=var).pack(side="right", padx=4)
         ttk.Button(ub, text=R(S.H_UNATT_SAVE), command=self._save_unattended).pack(anchor="w", padx=6, pady=6)
+        ttk.Label(ub, text=R(S.H_UNATT_WARN), foreground="gray", justify="right",
+                  wraplength=420).pack(anchor="e", padx=6, pady=(0, 6))
+
+        sb = ttk.LabelFrame(st, text=R(S.H_SERVER_BOX))
+        sb.pack(fill="x", padx=10, pady=8)
+        srow = ttk.Frame(sb); srow.pack(fill="x", padx=6, pady=6)
+        ttk.Label(srow, text=R(S.H_SERVER_LABEL)).pack(side="right")
+        self.srv = ttk.Entry(srow, width=30)
+        self.srv.insert(0, self.server)
+        self.srv.pack(side="right", padx=6)
+        ttk.Button(srow, text=R(S.H_SERVER_SAVE), command=self._save_server).pack(side="left")
 
         # ---- סשן פעיל ----
         self.sess = ttk.LabelFrame(r, text=R(S.H_SESSION_BOX))
@@ -121,8 +156,27 @@ class HostApp:
             pass
         self.root.destroy()
 
+    def _connect_remote(self) -> None:
+        rid = P.clean_id(self.c_id.get())
+        if not rid:
+            messagebox.showwarning(S.APP, R(S.V_NEED_FIELDS)); return
+        if rid == self.id:
+            messagebox.showwarning(S.APP, R(S.H_SELF)); return
+        ViewerApp(self.server, runner=self.runner, master=self.root,
+                  preset=(rid, self.c_pw.get()))
+        self.c_pw.delete(0, "end")
+        self.cfg = config.load()
+        self.c_id.configure(values=self.cfg.get("recent", []))
+
+    def _save_server(self) -> None:
+        self.cfg = config.load()
+        self.cfg["server"] = self.srv.get().strip()
+        config.save(self.cfg)
+        messagebox.showinfo(S.APP, R(S.H_SERVER_SAVED))
+
     # ---------------------------------------------------- גישה ללא נוכחות
     def _save_unattended(self) -> None:
+        self.cfg = config.load()      # הצופה עשוי היה לעדכן את הקובץ (רשימת אחרונים)
         had_key = config.get_unattended(self.cfg)[0] is not None
         if not self.u_on.get():
             config.clear_unattended(self.cfg)

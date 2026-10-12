@@ -50,13 +50,16 @@ def key_name(ev) -> str | None:
 
 
 class ViewerApp:
-    def __init__(self, server: str, runner: AsyncRunner | None = None) -> None:
+    def __init__(self, server: str | None = None, runner: AsyncRunner | None = None,
+                 master=None, preset: tuple[str, str] | None = None) -> None:
+        """master: חלון האב כשהצופה נפתח מתוך האפליקציה הראשית; preset: (מזהה, סיסמה)."""
         self.cfg = config.load()
-        self.server = server
+        self.server = config.server_url(server)
         self.runner = runner or AsyncRunner()
         self.events: queue.Queue = queue.Queue()
         self.client: ViewerClient | None = None
-        self.root = tk.Tk()
+        self.master = master
+        self.root = tk.Toplevel(master) if master is not None else tk.Tk()
         self.root.title(R(S.V_TITLE))
         self.root.geometry("460x360")
         self._last_move = 0.0
@@ -66,6 +69,10 @@ class ViewerApp:
         self._build_connect()
         self.root.after(30, self._tick)
         self.root.protocol("WM_DELETE_WINDOW", self._quit)
+        if preset:
+            self.id_cb.set(P.format_id(preset[0]))
+            self.pw.insert(0, preset[1])
+            self.root.after(200, self._connect)
 
     # ---------------------------------------------------------- מסך חיבור
     def _build_connect(self) -> None:
@@ -292,4 +299,5 @@ class ViewerApp:
             messagebox.showwarning(S.V_CLOSED_TITLE, R(S.V_FILE_ERR + S.reason(kw.get("reason"))))
 
     def run(self) -> None:
-        self.root.mainloop()
+        if self.master is None:
+            self.root.mainloop()

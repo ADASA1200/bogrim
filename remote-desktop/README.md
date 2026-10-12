@@ -9,6 +9,17 @@
    └────────── חיבור P2P מוצפן (STUN) / TURN כגיבוי ─────────┘
 ```
 
+## אפליקציות
+
+| פלטפורמה | מה זה | איך משיגים |
+|---|---|---|
+| **Windows** | `RDesk.exe`: תוכנה אחת כמו AnyDesk. מציגה את המזהה שלכם, מאפשרת להתחבר למחשב אחר, ומגדירים בה גישה ללא נוכחות | GitHub Actions: *Actions → build-windows-exe → Run workflow*, ואז מורידים את `RDesk-windows` מה-Artifacts. או על מחשב Windows: `python build_exe.py` |
+| **אנדרואיד** | `RDesk` (APK): צופה. שולטים במחשב מהטלפון, עם מגע כטאצ'פד ומקלדת | *Actions → build-android-apk → Run workflow*, ומורידים את `RDesk-android` (קובץ `app-debug.apk`). או מקומית: `cd ../android && ./gradlew assembleDebug` |
+
+- את התוכנות צריך לכוון לשרת האיתות שלכם: משתנה ה-repository `RDESK_SERVER` (*Settings → Secrets and variables → Actions → Variables*, למשל `wss://signal.example.com`) נשתל בעת הבנייה. אפשר גם לשנות בהגדרות התוכנה/האפליקציה.
+- התקנת APK מחוץ ל-Play דורשת לאשר "התקנה ממקורות לא ידועים".
+- אפליקציית האנדרואיד היא **צופה בלבד** (שולטת במחשב). שליטה *בטלפון* מהמחשב לא נתמכת עדיין.
+
 ## איך החיבור עובד (כמו ב-AnyDesk)
 
 1. במחשב הנשלט (**מארח**) מוצג **מזהה** בן 9 ספרות.
@@ -57,11 +68,9 @@ pip install -r requirements.txt      # Python 3.10+, ‏tkinter מגיע עם Py
    ```
    יוצג המזהה. בחלון "גישה ללא נוכחות" אפשר להגדיר סיסמה קבועה (לפחות 8 תווים) ולבחור אילו הרשאות יינתנו למי שמתחבר איתה.
    בלי ממשק גרפי: `--headless`; את הסיסמה הקבועה מגדירים עם `python -m rdesk unattended` (וכיבוי עם `--off`).
-3. **במחשב ממנו שולטים (צופה):**
-   ```bash
-   python -m rdesk viewer --server ws://SERVER_IP:8765
-   ```
-   מקלידים מזהה (סיסמה היא אופציונלית) ולוחצים "התחבר".
+3. **במחשב ממנו שולטים (צופה):** בלי פקודה, `python -m rdesk` פותח את **האפליקציה המלאה** (כמו ה-EXE):
+   חלון אחד עם המזהה שלכם (כמארח), תיבת "התחברות למחשב אחר", ולשונית הגדרות (גישה ללא נוכחות ושרת).
+   מקלידים מזהה (סיסמה היא אופציונלית) ולוחצים "התחבר". אפשר גם `python -m rdesk viewer` לצופה בלבד.
 
 הגדרות נשמרות ב-`~/.rdesk/config.json`. אם אין STUN זמין (רשת פנימית), `RDESK_STUN=""` מדלג עליו ומאיץ את ההתחברות.
 
@@ -110,5 +119,8 @@ rdesk/host.py, viewer.py  ליבת המארח והצופה (asyncio + aiortc)
 rdesk/capture.py          לכידת מסך → וידאו
 rdesk/inject.py           הזרקת עכבר/מקלדת
 rdesk/files.py, clipboard.py
-rdesk/gui_host.py, gui_viewer.py   ממשקי tkinter
+rdesk/gui_host.py, gui_viewer.py   ממשקי tkinter (האפליקציה המלאה)
+build_exe.py, run_app.py  בניית RDesk.exe
+../android/               אפליקציית אנדרואיד (Kotlin + WebRTC)
+../.github/workflows/     בנייה אוטומטית של ה-EXE וה-APK
 ```

@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RDesk</string>
+
+    <!-- מסך חיבור -->
+    <string name="connect_title">חיבור למחשב מרוחק</string>
+    <string name="hint_id">מזהה (9 ספרות)</string>
+    <string name="hint_password">סיסמה (אופציונלי)</string>
+    <string name="pw_help">בלי סיסמה, המשתמש במחשב המרוחק יתבקש לאשר את החיבור.\nעם סיסמת גישה ללא נוכחות (אם הוגדרה שם), החיבור יתבצע בלי אישור.</string>
+    <string name="hint_server">כתובת שרת האיתות</string>
+    <string name="btn_connect">התחבר</string>
+    <string name="recent">חיבורים אחרונים</string>
+    <string name="need_id">יש להזין את המזהה של המחשב המרוחק</string>
+    <string name="connecting">מתחבר…</string>
+    <string name="waiting_approval">ממתין לאישור המשתמש במחשב המרוחק…</string>
+    <string name="connect_failed">החיבור נכשל: %1$s</string>
+
+    <!-- סשן -->
+    <string name="security_code">קוד אבטחה: %1$s</string>
+    <string name="mode_unattended">גישה ללא נוכחות</string>
+    <string name="mode_interactive">באישור המשתמש</string>
+    <string name="menu">תפריט</string>
+    <string name="keyboard">מקלדת</string>
+    <string name="view_only">צפייה בלבד</string>
+    <string name="direct_touch">מגע ישיר (במקום טאצ\'פד)</string>
+    <string name="choose_monitor">בחירת צג</string>
+    <string name="monitor_item">צג %1$d (%2$dx%3$d)</string>
+    <string name="quality">איכות</string>
+    <string name="q_high">גבוהה</string>
+    <string name="q_mid">בינונית</string>
+    <string name="q_low">נמוכה</string>
+    <string name="chat">צ\'אט</string>
+    <string name="send">שלח</string>
+    <string name="chat_hint">הקלידו הודעה</string>
+    <string name="me_prefix">אני: </string>
+    <string name="host_prefix">מארח: </string>
+    <string name="send_file">שליחת קובץ</string>
+    <string name="disconnect">התנתק</string>
+    <string name="confirm_disconnect">לסיים את הסשן?</string>
+    <string name="yes">כן</string>
+    <string name="no">לא</string>
+    <string name="close">סגור</string>
+    <string name="no_control">המארח לא אישר שליטה במחשב. מצב צפייה בלבד.</string>
+    <string name="perm_changed">ההרשאות השתנו על ידי המארח</string>
+    <string name="file_incoming">מתקבל קובץ: %1$s</string>
+    <string name="file_received">הקובץ נשמר: %1$s</string>
+    <string name="file_sending">שולח: %1$s</string>
+    <string name="file_sent">נשלח: %1$s</string>
+    <string name="file_error">שגיאת קובץ: %1$s</string>
+    <string name="file_unknown_size">לא ניתן לדעת את גודל הקובץ</string>
+    <string name="session_closed">הסשן נסגר: %1$s</string>
+
+    <!-- שגיאות -->
+    <string name="err_bad_password">הסיסמה שגויה</string>
+    <string name="err_declined">המשתמש במחשב המרוחק דחה את החיבור</string>
+    <string name="err_busy">המחשב המרוחק עסוק בסשן אחר</string>
+    <string name="err_blocked">נחסמת זמנית עקב ניסיונות רבים. נסו שוב בעוד דקה</string>
+    <string name="err_not_found">המזהה לא נמצא או שהמחשב המרוחק לא מחובר</string>
+    <string name="err_auth">אימות המחשב המרוחק נכשל (ייתכן ניסיון התחזות)</string>
+    <string name="err_timeout">המחשב המרוחק לא הגיב בזמן</string>
+    <string name="err_server">לא ניתן להתחבר לשרת האיתות. בדקו את הכתובת ואת החיבור לרשת</string>
+    <string name="err_bad_server">כתובת השרת אינה תקינה (למשל ws://host:8765 או wss://host)</string>
+    <string name="err_host_ended">המחשב המרוחק סיים את הסשן</string>
+    <string name="err_lost">החיבור אבד</string>
+    <string name="err_disconnected">התנתקת מהסשן</string>
+    <string name="err_generic">שגיאה: %1$s</string>
+</resources>

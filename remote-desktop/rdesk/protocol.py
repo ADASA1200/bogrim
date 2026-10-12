@@ -8,7 +8,10 @@ import re
 import secrets
 from dataclasses import dataclass, asdict
 
-DEFAULT_SERVER = "ws://127.0.0.1:8765"
+import os
+
+# כתובת שרת האיתות. אפשר לשנות כאן לפני בניית ה-EXE, או במשתנה סביבה / בהגדרות התוכנה.
+DEFAULT_SERVER = os.environ.get("RDESK_SERVER", "ws://127.0.0.1:8765")
 MAX_SIGNAL_BYTES = 256 * 1024       # גודל מקסימלי להודעת איתות (SDP בלבד)
 MAX_CLIPBOARD_BYTES = 1024 * 1024
 MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024

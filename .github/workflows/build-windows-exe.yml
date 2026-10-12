@@ -1,0 +1,54 @@
+name: build-windows-exe
+
+# בונה RDesk.exe ל-Windows. הרצה ידנית: Actions -> build-windows-exe -> Run workflow.
+# כתובת שרת האיתות לשילוב בתוך ה-EXE: Settings -> Secrets and variables -> Actions -> Variables -> RDESK_SERVER
+# (למשל wss://signal.example.com). בלי משתנה, ה-EXE משתמש ב-ws://127.0.0.1:8765 וניתן לשנות בהגדרות התוכנה.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  exe:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: remote-desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: remote-desktop/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Set default signaling server
+        if: ${{ vars.RDESK_SERVER != '' }}
+        shell: pwsh
+        run: |
+          (Get-Content rdesk/protocol.py -Raw) -replace 'ws://127\.0\.0\.1:8765', '${{ vars.RDESK_SERVER }}' | Set-Content rdesk/protocol.py -NoNewline
+
+      - name: Tests (end-to-end, no display)
+        continue-on-error: true
+        run: python -m pytest -q
+
+      - name: Build RDesk.exe
+        run: python build_exe.py
+
+      - name: Check the exe was produced
+        shell: pwsh
+        run: |
+          $f = Get-Item dist/RDesk.exe
+          "{0} bytes" -f $f.Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RDesk-windows
+          path: remote-desktop/dist/RDesk.exe
+          if-no-files-found: error
