@@ -18,13 +18,19 @@
 
 | פלטפורמה | מה זה | איך משיגים |
 |---|---|---|
-| **Windows** | `RDesk.exe`: תוכנה אחת כמו AnyDesk. מציגה את המזהה שלכם, מאפשרת להתחבר למחשב אחר, ומגדירים בה גישה ללא נוכחות | GitHub Actions: *Actions → build-windows-exe → Run workflow*, ואז מורידים את `RDesk-windows` מה-Artifacts. או על מחשב Windows: `python build_exe.py` |
-| **אנדרואיד** | `RDesk` (APK): צופה. שולטים במחשב מהטלפון, עם מגע כטאצ'פד ומקלדת | *Actions → build-android-apk → Run workflow*, ומורידים את `RDesk-android` (קובץ `app-debug.apk`). או מקומית: `cd ../android && ./gradlew assembleDebug` |
+| **Windows (התקנה)** | `RDesk-Setup.exe`: תוכנת התקנה רגילה - קיצור בתפריט התחלה, אייקון לשולחן העבודה (אופציונלי), מופיעה ב"הסרת התקנה" כמו כל תוכנה | GitHub Actions: *Actions → build-windows-exe → Run workflow*, מורידים את `RDesk-windows-installer` מה-Artifacts |
+| **Windows (נייד)** | `RDesk.exe`: אותה תוכנה, בלי התקנה - קובץ בודד שרצים ישירות | אותה הרצה, `RDesk-windows-portable`. או מקומית: `python build_exe.py` |
+| **אנדרואיד** | `RDesk.apk`: מתקינים ישירות על הטלפון (APK הוא כבר קובץ התקנה). צופה - שולטים במחשב מהטלפון, עם מגע כטאצ'פד ומקלדת | *Actions → build-android-apk → Run workflow*, מורידים את `RDesk-android` (`app-debug.apk`). או מקומית: `cd ../android && ./gradlew assembleDebug` |
+
+שתי התוכנות ל-Windows (ההתקנה והנייד) מריצות בדיוק אותו `RDesk.exe` מבפנים - ההבדל הוא רק אם יש
+תהליך התקנה/הסרה מסודר או לא. אפליקציית האנדרואיד תמיד "מותקנת" - ככה APK עובד.
 
 - את התוכנות צריך לכוון לשרת האיתות שלכם: משתנה ה-repository `RDESK_SERVER` (*Settings → Secrets and variables → Actions → Variables*, למשל `wss://signal.example.com`) נשתל בעת הבנייה. אפשר גם לשנות בהגדרות התוכנה/האפליקציה.
 - **שימו לב:** GitHub מציג workflow בלשונית Actions רק אחרי שהקובץ נמצא בענף הראשי (main/master). מיזגו את הענף לפני שמריצים.
 - התקנת APK מחוץ ל-Play דורשת לאשר "התקנה ממקורות לא ידועים".
 - אפליקציית האנדרואיד היא **צופה בלבד** (שולטת במחשב). שליטה *בטלפון* מהמחשב לא נתמכת עדיין.
+- ההתקנה (`RDesk-Setup.exe`) לא דורשת הרשאות מנהל - מתקינה לתיקיית המשתמש. ה-EXE עצמו (גם בגרסה הנייד
+  וגם מתוך ההתקנה) לא חתום דיגיטלית, אז Windows SmartScreen עשוי להזהיר: "מידע נוסף" ← "הפעל בכל זאת".
 
 ## איך החיבור עובד (כמו ב-AnyDesk)
 
@@ -113,7 +119,7 @@ cd webui && npm ci && npm run build && cd ..    # בונה את ממשק ה-Reac
 - חיבור P2P מצליח ברוב הרשתות. לרשתות קשות (NAT סימטרי) הקימו
   [coturn](https://github.com/coturn/coturn) והעבירו `--turn turn:host:3478,user,pass` למארח.
 
-### בניית קובץ EXE ל-Windows
+### בניית קובץ EXE ל-Windows (נייד)
 ```bash
 cd webui && npm ci && npm run build && cd ..
 pip install pyinstaller
@@ -122,6 +128,16 @@ python build_exe.py
 build_exe.py בודק ש-`webui/dist` קיים, אורז אותו לתוך ה-EXE, ומגדיר את ה-`--collect-all` הדרושים
 ל-pywebview/aiortc/sv_ttk. שנו את `DEFAULT_SERVER` ב-`rdesk/protocol.py` לכתובת השרת שלכם לפני הבנייה,
 או השתמשו במשתנה `RDESK_SERVER` ב-GitHub Actions (ראו `.github/workflows/build-windows-exe.yml`).
+
+### בניית תוכנת התקנה (Setup.exe)
+```bash
+# אחרי python build_exe.py (למעלה) - רק על Windows, עם Inno Setup מותקן:
+# https://jrsoftware.org/isdl.php
+"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+```
+מייצר `installer_dist\RDesk-Setup.exe` לפי `installer.iss`: קיצור בתפריט התחלה, אייקון אופציונלי
+לשולחן העבודה, רישום ב"הסרת התקנה". ב-GitHub Actions זה קורה אוטומטית (Chocolatey מתקין את
+Inno Setup) ושני הקבצים (`RDesk-windows-installer` ו-`RDesk-windows-portable`) עולים כ-Artifacts נפרדים.
 
 ### פיתוח הממשק (React)
 ```bash
@@ -186,7 +202,8 @@ rdesk/net.py              אמון בחנות התעודות של מערכת ה�
 rdesk/webapp.py           הגשר בין React ל-Python (pywebview) - ה-UI הנוכחי
 rdesk/gui_host.py, gui_viewer.py, theme.py   ממשק Tkinter ישן (‎--legacy-ui בלבד)
 webui/                    קוד המקור של ממשק ה-React (Vite); npm run build -> webui/dist (לא ב-git)
-build_exe.py, run_app.py  בניית RDesk.exe
+build_exe.py, run_app.py  בניית RDesk.exe (נייד)
+installer.iss, rdesk_icon.ico   בניית RDesk-Setup.exe (התקנה)
 ../android/               אפליקציית אנדרואיד (Kotlin + WebRTC)
 ../.github/workflows/     בנייה אוטומטית של ה-EXE וה-APK
 ```

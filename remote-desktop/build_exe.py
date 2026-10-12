@@ -41,6 +41,9 @@ def main(extra: list[str]) -> int:
            "--add-data", f"{WEBUI_DIST}{os_sep()}webui_dist"]
     if sys.platform == "win32":
         cmd.append("--windowed")      # בלי חלון קונסול
+        icon = ROOT / "rdesk_icon.ico"
+        if icon.exists():
+            cmd += ["--icon", str(icon)]
     for m in COLLECT_ALL:
         cmd += ["--collect-all", m]
     for m in SUBMODULES:

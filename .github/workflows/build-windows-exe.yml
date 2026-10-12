@@ -65,8 +65,25 @@ jobs:
           $f = Get-Item dist/RDesk.exe
           "{0} bytes" -f $f.Length
 
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+        shell: pwsh
+
+      - name: Build the installer (RDesk-Setup.exe)
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+          $f = Get-Item installer_dist\RDesk-Setup.exe
+          "{0} bytes" -f $f.Length
+
       - uses: actions/upload-artifact@v4
         with:
-          name: RDesk-windows
+          name: RDesk-windows-installer
+          path: remote-desktop/installer_dist/RDesk-Setup.exe
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RDesk-windows-portable
           path: remote-desktop/dist/RDesk.exe
           if-no-files-found: error

@@ -6,3 +6,4 @@ dist/
 *.spec
 webui/node_modules/
 webui/dist/
+installer_dist/
