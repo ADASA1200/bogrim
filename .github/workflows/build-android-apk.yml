@@ -25,7 +25,7 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: android-actions/setup-android@v3
+      # ב-ubuntu-latest ה-Android SDK כבר מותקן (ANDROID_HOME), אין צורך ב-setup-android
 
       - uses: gradle/actions/setup-gradle@v4
 
