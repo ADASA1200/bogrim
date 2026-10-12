@@ -72,3 +72,20 @@ def clear_unattended(cfg: dict) -> None:
 def server_url(arg: str | None = None) -> str:
     """עדיפות: פרמטר מפורש > הגדרות משתמש > ברירת המחדל."""
     return arg or load().get("server") or P.DEFAULT_SERVER
+
+
+# ---- מצב "המחשב הזה הוא גם השרת" (בלי שרת איתות נפרד) --------------------
+DEFAULT_EMBEDDED_PORT = 8765
+
+
+def get_embedded(cfg: dict) -> tuple[bool, int]:
+    e = cfg.get("embedded_server") or {}
+    port = e.get("port", DEFAULT_EMBEDDED_PORT)
+    if not isinstance(port, int) or not (1 <= port <= 65535):
+        port = DEFAULT_EMBEDDED_PORT
+    return bool(e.get("enabled", False)), port
+
+
+def set_embedded(cfg: dict, enabled: bool, port: int = DEFAULT_EMBEDDED_PORT) -> None:
+    cfg["embedded_server"] = {"enabled": bool(enabled), "port": int(port)}
+    save(cfg)

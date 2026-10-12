@@ -27,6 +27,8 @@ def main(argv: list[str] | None = None) -> None:
     h.add_argument("--server")
     h.add_argument("--headless", action="store_true", help=S.CLI_HEADLESS)
     h.add_argument("--turn", help=S.CLI_TURN)
+    h.add_argument("--serve-signaling", nargs="?", const=-1, type=int, metavar="PORT",
+                   help=S.CLI_SERVE_SIGNALING)
 
     v = sub.add_parser("viewer", help=S.CLI_VIEWER)
     v.add_argument("--server")
@@ -107,17 +109,38 @@ async def _headless_host(args) -> None:
         url, user, cred = args.turn.split(",", 2)
         turn = {"url": url, "username": user, "credential": cred}
 
+    # "המחשב הזה כשרת": לפי ההגדרות השמורות, או --serve-signaling שדורס אותן להרצה הזו בלבד
+    emb_on, emb_port = config.get_embedded(cfg)
+    cli_serve = getattr(args, "serve_signaling", None)
+    if cli_serve is not None:
+        emb_on, emb_port = True, (cli_serve if cli_serve > 0 else emb_port)
+
+    embedded = None
+    server_url = config.server_url(args.server)
+    if emb_on:
+        from . import embedded as E
+        embedded = await E.start(emb_port)
+        server_url = f"ws://127.0.0.1:{emb_port}"
+        print(S.CLI_EMBED_STARTING.format(port=emb_port), flush=True)
+        print(S.CLI_EMBED_LAN.format(ip=embedded.lan_ip or "?", port=emb_port), flush=True)
+        pub = await embedded.fill_public_ip()
+        print(S.CLI_EMBED_PUBLIC.format(ip=pub, port=emb_port) if pub else S.CLI_EMBED_NO_PUBLIC, flush=True)
+
     async def approval(info):
         ans = await asyncio.get_running_loop().run_in_executor(
             None, input, S.CLI_ASK.format(peer=info["peer"]))
         return P.Permissions() if ans.strip().lower() in S.CLI_YES else None
 
-    svc = HostService(config.server_url(args.server), hid, approval=approval, on_event=_show,
+    svc = HostService(server_url, hid, approval=approval, on_event=_show,
                       rtc_config=make_rtc_config(turn=turn),
                       unattended_key=key, unattended_perms=uperms)
     print(S.CLI_ID_LINE.format(id=P.format_id(hid)), flush=True)
     print(S.CLI_UNATT_ON if key else S.CLI_UNATT_OFF, flush=True)
-    await svc.run()
+    try:
+        await svc.run()
+    finally:
+        if embedded is not None:
+            await embedded.close()
 
 
 if __name__ == "__main__":

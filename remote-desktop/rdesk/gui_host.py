@@ -6,7 +6,7 @@ import queue
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
-from . import config, protocol as P, strings as S
+from . import config, embedded as E, protocol as P, strings as S
 from .aio import AsyncRunner
 from .host import HostService
 from .gui_viewer import ViewerApp
@@ -24,20 +24,26 @@ class HostApp:
         self.id = config.host_identity(self.cfg)
         key, uperms = config.get_unattended(self.cfg)
         self.events: queue.Queue = queue.Queue()
+        self.embedded: E.EmbeddedServer | None = None
+        emb_on, emb_port = config.get_embedded(self.cfg)
+        self.embedded_enabled, self.embedded_port = emb_on, emb_port
+        # "המחשב הזה כשרת": המארח נרשם מול שרת מוטבע משלו (127.0.0.1), לא מול
+        # שדה "שרת" הכללי - זה נשאר לחיבור יוצא למחשב אחר (ראו _connect_remote).
+        host_server = f"ws://127.0.0.1:{emb_port}" if emb_on else server
         self.service = HostService(
-            server, self.id, approval=self._approval,
+            host_server, self.id, approval=self._approval,
             on_event=lambda k, **kw: self.events.put((k, kw)),
             unattended_key=key, unattended_perms=uperms)
         self.root = tk.Tk()
         self.root.title(R(S.H_TITLE))
         self.root.geometry("480x720")
-        self._build(key is not None, uperms)
-        self.runner.submit(self.service.run())
+        self._build(key is not None, uperms, emb_on, emb_port)
+        self.runner.submit(self._start_and_run(emb_on, emb_port))
         self.root.after(100, self._poll)
         self.root.protocol("WM_DELETE_WINDOW", self._quit)
 
     # ---------------------------------------------------------------- UI
-    def _build(self, unatt_on: bool, up: P.Permissions) -> None:
+    def _build(self, unatt_on: bool, up: P.Permissions, emb_on: bool, emb_port: int) -> None:
         nb = ttk.Notebook(self.root)
         nb.pack(fill="both", expand=True)
         r, st = ttk.Frame(nb), ttk.Frame(nb)
@@ -54,6 +60,9 @@ class HostApp:
         self.status.pack(anchor="e", padx=6)
         ttk.Label(top, text=R(S.H_TEMP_NOTE), foreground="gray",
                   wraplength=400, justify="right").pack(anchor="e", padx=6, pady=(0, 6))
+
+        if emb_on:
+            self._build_embedded_status(r, emb_port)
 
         # ---- התחברות למחשב אחר ----
         cb = ttk.LabelFrame(r, text=R(S.H_CONNECT_BOX))
@@ -102,6 +111,20 @@ class HostApp:
         self.srv.pack(side="right", padx=6)
         ttk.Button(srow, text=R(S.H_SERVER_SAVE), command=self._save_server).pack(side="left")
 
+        # ---- המחשב הזה כשרת (בלי שרת נפרד) ----
+        eb = ttk.LabelFrame(st, text=R(S.H_EMBED_BOX))
+        eb.pack(fill="x", padx=10, pady=4)
+        self.e_on = tk.BooleanVar(value=emb_on)
+        ttk.Checkbutton(eb, text=R(S.H_EMBED_ENABLE), variable=self.e_on).pack(anchor="e", padx=6, pady=2)
+        erow = ttk.Frame(eb); erow.pack(fill="x", padx=6)
+        ttk.Label(erow, text=R(S.H_EMBED_PORT)).pack(side="right")
+        self.e_port = ttk.Entry(erow, width=8, justify="right")
+        self.e_port.insert(0, str(emb_port))
+        self.e_port.pack(side="right", padx=6)
+        ttk.Label(eb, text=R(S.H_EMBED_HELP), foreground="gray", justify="right",
+                  wraplength=420).pack(anchor="e", padx=6, pady=(4, 2))
+        ttk.Button(eb, text=R(S.H_EMBED_SAVE), command=self._save_embedded).pack(anchor="w", padx=6, pady=6)
+
         # ---- סשן פעיל ----
         self.sess = ttk.LabelFrame(r, text=R(S.H_SESSION_BOX))
         self.sess.pack(fill="both", expand=True, padx=10, pady=8)
@@ -126,6 +149,29 @@ class HostApp:
         self.entry = ttk.Entry(self.sess, justify="right")
         self.entry.pack(fill="x", padx=6, pady=(0, 6))
         self.entry.bind("<Return>", self._send_chat)
+
+    def _build_embedded_status(self, parent, port: int) -> None:
+        box = ttk.LabelFrame(parent, text=R(S.H_EMBED_BOX))
+        box.pack(fill="x", padx=10, pady=4)
+        self.e_status_lbl = ttk.Label(box, text=R(S.H_EMBED_STARTING), foreground="gray")
+        self.e_status_lbl.pack(anchor="e", padx=6, pady=2)
+        lrow = ttk.Frame(box); lrow.pack(fill="x", padx=6)
+        self.e_lan_lbl = ttk.Label(lrow, text="", foreground="gray")
+        self.e_lan_lbl.pack(side="right")
+        ttk.Button(lrow, text=R(S.H_EMBED_COPY_LAN),
+                  command=lambda: self._copy(self._embed_url(self.embedded and self.embedded.lan_ip))
+                  ).pack(side="left", padx=4)
+        prow = ttk.Frame(box); prow.pack(fill="x", padx=6, pady=(0, 6))
+        self.e_pub_lbl = ttk.Label(prow, text="", foreground="gray")
+        self.e_pub_lbl.pack(side="right")
+        ttk.Button(prow, text=R(S.H_EMBED_COPY_PUBLIC),
+                  command=lambda: self._copy(self._embed_url(self.embedded and self.embedded.public_ip))
+                  ).pack(side="left", padx=4)
+
+    def _embed_url(self, ip: str | None) -> str:
+        if not ip or not self.embedded:
+            return ""
+        return f"ws://{ip}:{self.embedded.port}"
 
     def _copy(self, text: str) -> None:
         self.root.clipboard_clear(); self.root.clipboard_append(text)
@@ -154,6 +200,11 @@ class HostApp:
             self.runner.submit(self.service.stop()).result(3)
         except Exception:
             pass
+        if self.embedded is not None:
+            try:
+                self.runner.submit(self.embedded.close()).result(2)
+            except Exception:
+                pass
         self.root.destroy()
 
     def _connect_remote(self) -> None:
@@ -173,6 +224,36 @@ class HostApp:
         self.cfg["server"] = self.srv.get().strip()
         config.save(self.cfg)
         messagebox.showinfo(S.APP, R(S.H_SERVER_SAVED))
+
+    # ------------------------------------------------- המחשב הזה כשרת
+    def _save_embedded(self) -> None:
+        try:
+            port = int(self.e_port.get().strip())
+            if not (1 <= port <= 65535):
+                raise ValueError
+        except ValueError:
+            messagebox.showwarning(S.APP, R(S.H_EMBED_BAD_PORT)); return
+        self.cfg = config.load()
+        config.set_embedded(self.cfg, self.e_on.get(), port)
+        messagebox.showinfo(S.APP, R(S.H_EMBED_SAVED))
+
+    async def _start_and_run(self, emb_on: bool, emb_port: int) -> None:
+        """מפעיל קודם את השרת המוטבע (אם צריך) ורק אז את לולאת המארח - כדי
+        שניסיון ההתחברות הראשון לא ייתקל ב"אין שרת" עוד לפני שהוא עלה."""
+        if emb_on:
+            try:
+                self.embedded = await E.start(emb_port)
+            except OSError as e:
+                self.events.put(("embedded_error", {"reason": str(e)}))
+            else:
+                self.events.put(("embedded_ready", {}))
+                asyncio.ensure_future(self._fill_public_ip())
+        await self.service.run()
+
+    async def _fill_public_ip(self) -> None:
+        if self.embedded is not None:
+            await self.embedded.fill_public_ip()
+            self.events.put(("embedded_public", {}))
 
     # ---------------------------------------------------- גישה ללא נוכחות
     def _save_unattended(self) -> None:
@@ -277,6 +358,18 @@ class HostApp:
             self._log(S.H_FILE_ERR + S.reason(kw.get("reason")))
         elif kind == "file_sent":
             self._log(S.H_FILE_OUT + kw["name"])
+        elif kind == "embedded_ready":
+            self.e_status_lbl.configure(text=R(S.H_EMBED_RUNNING.format(port=self.embedded.port)), foreground="green")
+            lan = self.embedded.lan_ip
+            self.e_lan_lbl.configure(text=R(S.H_EMBED_LAN.format(ip=lan or "?", port=self.embedded.port)))
+        elif kind == "embedded_public":
+            pub = self.embedded.public_ip if self.embedded else None
+            if pub:
+                self.e_pub_lbl.configure(text=R(S.H_EMBED_PUBLIC.format(ip=pub, port=self.embedded.port)))
+            else:
+                self.e_pub_lbl.configure(text=R(S.H_EMBED_NO_PUBLIC))
+        elif kind == "embedded_error":
+            messagebox.showwarning(S.APP, R(f"לא ניתן להפעיל את השרת המוטבע: {S.reason(kw.get('reason'))}"))
 
     def run(self) -> None:
         self.root.mainloop()
