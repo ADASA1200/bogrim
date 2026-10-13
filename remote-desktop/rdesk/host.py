@@ -158,6 +158,16 @@ class HostService:
         if self.ws:
             await self.ws.close()
 
+    async def set_id(self, new_id: str) -> None:
+        """מחליף את מזהה המארח בזמן ריצה (למשל: מישהו רוצה מספר שנראה
+        פחות 'נחמד'/קליט). מכריח רישום מחדש אצל שרת האיתות עם המזהה החדש -
+        run() שולח register עם self.id בכל פעם שהוא מתחבר מחדש, אז סגירת
+        החיבור הנוכחי מספיקה כדי שה-ID החדש ייכנס לתוקף."""
+        self.id = new_id
+        self.registered.clear()
+        if self.ws is not None:
+            await self.ws.close()
+
     async def _send(self, peer: str, payload: dict) -> None:
         if self.ws:
             await self.ws.send(P.dumps({"type": "relay", "to": peer, "payload": payload}))

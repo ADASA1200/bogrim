@@ -319,6 +319,40 @@ async def test_two_embedded_hosts_different_ports_are_independent(tmp_path):
         await srv_b.close()
 
 
+async def test_set_id_forces_reregistration_under_new_id(tmp_path):
+    """למשתמש שה-ID האקראי הראשוני "נראה" לו קליט/לא מספיק אקראי - אפשרות
+    להחליף אותו בזמן ריצה. בודקים שזה לא רק משנה מחרוזת בזיכרון: הצד השני
+    חייב להפסיק להגיע עם המזהה הישן ולהתחיל להגיע עם החדש."""
+    port = 18912
+    srv = await embedded.start(port)
+    try:
+        host = HostService(
+            f"ws://127.0.0.1:{port}", "111222333", screen=SyntheticScreen(), injector=NullInjector(),
+            clipboard=MemoryClipboard(), approval=lambda info: asyncio.sleep(0, result=P.Permissions()),
+            on_event=lambda k, **kw: None, download_dir=tmp_path / "recv", rtc_config=make_rtc_config([]),
+        )
+        task = asyncio.ensure_future(host.run())
+        await asyncio.wait_for(host.registered.wait(), 5)
+
+        await host.set_id("999888777")
+        assert host.id == "999888777"
+        await asyncio.wait_for(host.registered.wait(), 5)   # התנתקות+רישום מחדש בשרת
+
+        v_old = ViewerClient(f"ws://127.0.0.1:{port}", clipboard=MemoryClipboard())
+        with pytest.raises(ConnectError, match="not found"):
+            await v_old.connect("111222333")   # המזהה הישן כבר לא רשום בשום מקום
+
+        v_new = ViewerClient(f"ws://127.0.0.1:{port}", clipboard=MemoryClipboard())
+        await v_new.connect("999888777")
+        assert v_new.connected
+        await v_new.disconnect()
+
+        await host.stop()
+        task.cancel()
+    finally:
+        await srv.close()
+
+
 async def test_tcp_tunnel_over_real_webrtc_data_channel(tmp_path):
     """לא היה-יצדדי (unit) כמו test_tunnel.py - כאן זה דרך handshake WebRTC
     אמיתי בין HostService ל-ViewerClient, בדיוק כמו בפרודקשן."""

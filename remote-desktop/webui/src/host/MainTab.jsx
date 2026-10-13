@@ -16,6 +16,19 @@ export function MainTab({ state, setState }) {
   const [connectError, setConnectError] = useState("");
   const [inviteUrl, setInviteUrl] = useState("");
   const [creatingInvite, setCreatingInvite] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+
+  async function regenerateId() {
+    if (!window.confirm("להחליף את המזהה למספר אקראי חדש? מישהו שישתמש במזהה הישן לא יוכל יותר להתחבר.")) return;
+    setRegenerating(true);
+    try {
+      const id = await callApi("regenerateId");
+      setState((s) => ({ ...s, id }));
+      pushToast("המזהה הוחלף.");
+    } finally {
+      setRegenerating(false);
+    }
+  }
 
   async function makeInvite() {
     setCreatingInvite(true);
@@ -32,10 +45,6 @@ export function MainTab({ state, setState }) {
     const id = connectId.replace(/\D/g, "");
     if (!id) {
       setConnectError("יש להזין את המזהה של המחשב המרוחק");
-      return;
-    }
-    if (id === state.id) {
-      setConnectError("לא ניתן להתחבר למחשב הזה עצמו");
       return;
     }
     setConnecting(true);
@@ -57,7 +66,12 @@ export function MainTab({ state, setState }) {
       <Card title="המחשב הזה">
         <div className="row-between">
           <span className="id-display">{formatId(state.id)}</span>
-          <CopyButton text={state.id} title="העתק מזהה" />
+          <div style={{ display: "flex", gap: 6 }}>
+            <CopyButton text={state.id} title="העתק מזהה" />
+            <Button variant="ghost" size="sm" loading={regenerating} onClick={regenerateId} title="החלף למזהה אקראי חדש">
+              החלף מזהה
+            </Button>
+          </div>
         </div>
         <div className="mt-2">
           <Pill tone={state.online ? "success" : "danger"}>

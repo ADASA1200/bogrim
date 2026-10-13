@@ -60,6 +60,7 @@ async function mockCall(method, args) {
     getWolMac: () => "",
     getViewerPreset: () => ({ server: "ws://127.0.0.1:8765", recent: ["111222333"] }),
     createInviteLink: () => ({ url: "rdesk://connect/123456789/demo-token?server=ws%3A%2F%2F127.0.0.1%3A8765", expiresInMinutes: 10 }),
+    regenerateId: () => String(Math.floor(100000000 + Math.random() * 900000000)),
     parseInviteLink: (url) => (url?.startsWith("rdesk://") ? { id: "123456789", token: "demo-token", server: "ws://127.0.0.1:8765" } : null),
     getAccountState: () => ({ loggedIn: false, username: null }),
     getAddressBook: () => [],

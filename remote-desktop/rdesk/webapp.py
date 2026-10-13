@@ -165,6 +165,19 @@ class HostAPI(_WindowPusher):
         finally:
             target.unlink(missing_ok=True)
 
+    def regenerateId(self) -> str:
+        """מחליף את המזהה בן ה-9 הספרות שלנו במזהה אקראי חדש - למי שהמזהה
+        שהוגרל לו בפעם הראשונה "נראה" לו קליט/לא מספיק אקראי (למרות שגם
+        המזהה הקודם הוגרל עם אותו CSPRNG). קישורי הזמנה/מזהים שמורים
+        שהצד השני שמר תחת המזהה הישן לא יעבדו יותר - זה בכוונה."""
+        self.cfg = config.load()
+        new_id = P.new_id()
+        self.cfg["id"] = new_id
+        config.save(self.cfg)
+        self.id = new_id
+        self.runner.submit(self.service.set_id(new_id))
+        return new_id
+
     def createInviteLink(self, minutes: int = 10) -> dict:
         now = time.time()
         self._invites = {t: v for t, v in self._invites.items() if v[1] > now}   # ניקוי ישנים
@@ -319,9 +332,10 @@ class HostAPI(_WindowPusher):
         }
 
     def openViewer(self, host_id: str, password: str):
+        # מתחברים גם למזהה של המחשב הזה עצמו - שימושי לבדיקה שהכול עובד
+        # בלי צורך במכשיר שני (הצד השני רואה את זה כחיבור רגיל: סיבוב הלוך
+        # ושוב דרך שרת האיתות, פשוט לשני תפקידים על אותו מחשב).
         host_id = P.clean_id(host_id)
-        if host_id == self.id:
-            return  # ה-UI כבר חוסם את זה; זו רק הגנה כפולה
         cfg = config.load()
         recent = [host_id] + [r for r in cfg.get("recent", []) if r != host_id]
         cfg["recent"] = recent[:10]

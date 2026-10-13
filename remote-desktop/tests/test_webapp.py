@@ -397,6 +397,38 @@ def test_create_invite_link_expires(host_api, monkeypatch):
     assert host_api._check_invite(parsed["token"]) is None
 
 
+async def test_regenerate_id_updates_config_and_host_service(host_api, runner):
+    """למשתמש שה-ID האקראי שהוגרל "נראה" לו קליט/לא מספיק אקראי - אפשרות
+    להחליף אותו. בודקים שזה לא רק שינוי קוסמטי: ה-HostService עצמו (שקובע
+    עם איזה מזהה הוא נרשם מול שרת האיתות) מתעדכן בהתאם."""
+    await wait_online(host_api)
+    old_id = host_api.id
+
+    new_id = host_api.regenerateId()
+    assert new_id != old_id
+    assert len(new_id) == 9 and new_id.isdigit()
+    assert host_api.id == new_id
+    assert webapp.config.load()["id"] == new_id
+    assert await wait_for(lambda: host_api.service.id == new_id, 5)
+
+
+def test_open_viewer_allows_connecting_to_this_computer_itself(host_api, monkeypatch):
+    """בעבר openViewer חזר בלי לעשות כלום אם המזהה המבוקש היה המזהה של
+    המחשב הזה עצמו - חסימה שקטה בלי שום משוב, שגרמה למי שרצה לבדוק את
+    ה-flow המלא (מארח+צופה על אותו מחשב) לחשוב ש"בקשת החיבור לא קופצת".
+    הוסר בכוונה: צריך אופציה להתחבר לעצמך, לבדיקה."""
+    opened = []
+    monkeypatch.setattr(webapp, "open_viewer_window",
+                        lambda server_arg, runner, preset=None, **kw: opened.append((server_arg, preset)))
+
+    host_api.openViewer(host_api.id, "")
+
+    assert len(opened) == 1
+    _, preset = opened[0]
+    assert preset["id"] == host_api.id
+    assert host_api.id in webapp.config.load()["recent"]
+
+
 def test_parse_invite_link_via_viewer_api(runner):
     viewer = webapp.ViewerAPI(runner, None)
     url = P.make_invite_url("135791357", "tok", "ws://127.0.0.1:8765")
