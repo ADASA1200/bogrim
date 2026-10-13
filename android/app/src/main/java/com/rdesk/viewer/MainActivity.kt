@@ -39,6 +39,9 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 import org.webrtc.VideoTrack
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : Activity(), ClientListener {
 
@@ -76,6 +79,7 @@ class MainActivity : Activity(), ClientListener {
     private var chatView: TextView? = null
     private var lastClip: String? = null
     private var info: ConnectionInfo? = null
+    private var activePeerId: String? = null
     private val clipListener = ClipboardManager.OnPrimaryClipChangedListener {
         val t = currentClipText()
         if (t != null && t != lastClip) {
@@ -151,6 +155,12 @@ class MainActivity : Activity(), ClientListener {
         })
         recentBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         col.addView(recentBox)
+        col.addView(Button(this).apply {
+            setText(R.string.history_btn)
+            isAllCaps = false
+            setBackgroundColor(Color.TRANSPARENT)
+            setOnClickListener { showHistory() }
+        })
         connectScreen = ScrollView(this).apply {
             isFillViewport = true
             addView(col)
@@ -214,6 +224,8 @@ class MainActivity : Activity(), ClientListener {
             try {
                 val i = c.connect(server, id, pw)
                 saveRecent(id)
+                activePeerId = id
+                ConnectionHistory.startEntry(prefs, id, i.mode)
                 showSession(i)
             } catch (e: ConnectException) {
                 client = null
@@ -430,7 +442,44 @@ class MainActivity : Activity(), ClientListener {
         client = null
         info = null
         kbVisible = false
+        activePeerId?.let { ConnectionHistory.endLast(prefs, it) }
+        activePeerId = null
         showConnect(getString(R.string.session_closed, reasonText(reasonCode)), isError = false)
+    }
+
+    // ------------------------------------------------------------------ היסטוריית חיבורים
+    private fun showHistory() {
+        val entries = ConnectionHistory.recent(prefs)
+        val df = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault())
+        val view: View = if (entries.isEmpty()) {
+            TextView(this).apply {
+                setText(R.string.history_empty)
+                setPadding(dp(16), dp(16), dp(16), dp(16))
+            }
+        } else {
+            val col = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(8), dp(8), dp(8), dp(8))
+            }
+            for (e in entries) {
+                val mode = getString(if (e.mode == "unattended") R.string.mode_unattended else R.string.mode_interactive)
+                val duration = e.endedAt?.let { formatDuration(it - e.startedAt) } ?: getString(R.string.history_ongoing)
+                col.addView(TextView(this).apply {
+                    text = "${df.format(Date(e.startedAt * 1000))} · ${Protocol.formatId(e.peer)} · $mode · $duration"
+                    setPadding(0, dp(6), 0, dp(6))
+                })
+            }
+            ScrollView(this).apply { addView(col) }
+        }
+        AlertDialog.Builder(this).setTitle(R.string.history_title).setView(view)
+            .setNegativeButton(R.string.close, null)
+            .setNeutralButton(R.string.history_clear) { _, _ -> ConnectionHistory.clear(prefs) }
+            .show()
+    }
+
+    private fun formatDuration(seconds: Long): String {
+        val s = seconds.coerceAtLeast(0)
+        return "%d:%02d".format(s / 60, s % 60)
     }
 
     // ------------------------------------------------------------------ מקלדת

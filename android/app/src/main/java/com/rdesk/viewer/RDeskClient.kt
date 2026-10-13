@@ -30,7 +30,6 @@ import org.webrtc.SessionDescription
 import org.webrtc.VideoTrack
 import java.io.File
 import java.nio.ByteBuffer
-import java.security.SecureRandom
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -77,12 +76,6 @@ class RDeskClient(
             factory = f
             return f
         }
-
-        private fun randomHex(n: Int): String {
-            val b = ByteArray(n)
-            SecureRandom().nextBytes(b)
-            return b.joinToString("") { "%02x".format(it) }.take(n)
-        }
     }
 
     private var pc: PeerConnection? = null
@@ -123,7 +116,7 @@ class RDeskClient(
             }
 
             try {
-                val me = "v" + randomHex(12)
+                val me = DeviceIdentity.get(appContext.getSharedPreferences("rdesk", Context.MODE_PRIVATE))
                 ws.send(JSONObject().put("type", "register").put("id", me).toString())
                 expect(inbox, "registered", 10_000)
 

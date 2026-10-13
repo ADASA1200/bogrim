@@ -10,6 +10,11 @@
     <string name="hint_server">כתובת שרת האיתות</string>
     <string name="btn_connect">התחבר</string>
     <string name="recent">חיבורים אחרונים</string>
+    <string name="history_btn">היסטוריית חיבורים</string>
+    <string name="history_title">היסטוריית חיבורים</string>
+    <string name="history_empty">עדיין לא בוצעו חיבורים</string>
+    <string name="history_clear">נקה היסטוריה</string>
+    <string name="history_ongoing">מתבצע כעת</string>
     <string name="need_id">יש להזין את המזהה של המחשב המרוחק</string>
     <string name="connecting">מתחבר…</string>
     <string name="waiting_approval">ממתין לאישור המשתמש במחשב המרוחק…</string>
