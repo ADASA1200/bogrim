@@ -53,10 +53,20 @@ def _encode_frame_jpeg(arr) -> str:
 
 
 class _WindowPusher:
-    """עטיפה דקה סביב webview.Window: שולח אירוע JSON ל-JS, שקטה אם החלון כבר נסגר."""
+    """עטיפה דקה סביב webview.Window: שולח אירוע JSON ל-JS, שקטה אם החלון כבר נסגר.
+
+    שם התכונה מתחיל ב-_ בכוונה: pywebview בונה את ה-API שחשוף ל-JS על ידי
+    סריקה רקורסיבית (reflection) של כל התכונות הלא-קריאות באובייקט הזה -
+    ומדלג במפורש על שמות שמתחילים ב-_. בלי זה, הסריקה יורדת לתוך webview.Window
+    עצמו, ובצד Windows זה מגיע עד ל-Form הגולמי (win.native) עם כל עץ
+    ה-COM/Accessibility שלו - כולל תכונות כמו Rectangle.Empty שמחזירות בכל
+    קריאה אובייקט *חדש* (so the id-based cycle guard never fires), ומובילות
+    ל-RecursionError אמיתי (ולפעמים לקריסה), בתוספת ניגישה ל-COM של
+    CoreWebView2 מ-thread לא נכון. זה לא תקלה של pywebview - זו המוסכמה
+    המתועדת שלו: כל תכונה שלא מיועדת לקריאה מ-JS צריכה להתחיל ב-_."""
 
     def __init__(self) -> None:
-        self.win: webview.Window | None = None
+        self._win: webview.Window | None = None
         self._clipboard = Clipboard()
 
     def getClipboardText(self) -> str:
@@ -66,7 +76,7 @@ class _WindowPusher:
         return self._clipboard.get() or ""
 
     def push(self, kind: str, data=None) -> None:
-        win = self.win
+        win = self._win
         if win is None:
             return
         code = f"window.__rdeskEvent && window.__rdeskEvent({json.dumps(kind)}, {json.dumps(data)})"
@@ -201,29 +211,29 @@ class HostAPI(_WindowPusher):
 
         self.tray = tray.TrayIcon(self._tray_open, self._tray_disconnect, self._tray_quit)
         self.tray.start()
-        if self.win is not None:
-            self.win.events.closing += self._on_window_closing
+        if self._win is not None:
+            self._win.events.closing += self._on_window_closing
 
     def _on_window_closing(self):
         if self.tray is not None and self.tray.available:
-            self.win.hide()
+            self._win.hide()
             self._window_visible = False
             return False  # מבטל את הסגירה בפועל - נשארים ברקע עם האייקון
         return None
 
     def _tray_open(self) -> None:
-        if self.win is not None:
-            self.win.show()
-            self.win.restore()
+        if self._win is not None:
+            self._win.show()
+            self._win.restore()
             self._window_visible = True
 
     def _tray_disconnect(self) -> None:
         self.disconnect()
 
     def _tray_quit(self) -> None:
-        if self.win is not None:
+        if self._win is not None:
             try:
-                self.win.destroy()
+                self._win.destroy()
             except Exception:
                 pass
 
@@ -266,9 +276,9 @@ class HostAPI(_WindowPusher):
         self._pending_peer[req_id] = info["peer"]
         # בקשת חיבור שדורשת אישור אנושי - מציגים את החלון (אולי מוסתר למגש)
         # כדי שהמשתמש בכלל יראה את חלון האישור, ומדליקים את האייקון כ"מחכה".
-        if self.win is not None:
-            self.win.show()
-            self.win.restore()
+        if self._win is not None:
+            self._win.show()
+            self._win.restore()
             self._window_visible = True
         if self.tray is not None:
             self.tray.set_connected(True, info.get("peer", ""))
@@ -338,7 +348,7 @@ class HostAPI(_WindowPusher):
         self.runner.submit(self.service.respond_elevation(bool(approved)))
 
     def pickAndSendFile(self):
-        win = self.win
+        win = self._win
         result = win.create_file_dialog(webview.OPEN_DIALOG) if win else None
         if result:
             self.runner.submit(self.service.send_file(result[0]))
@@ -477,7 +487,7 @@ def open_host_window(server_arg: str | None, runner: AsyncRunner, **win_kw) -> H
     api = HostAPI(server_arg, runner)
     opts = {"width": 580, "height": 820, "min_size": (420, 560), **win_kw}
     win = webview.create_window("RDesk", url=_index_html(), js_api=api, **opts)
-    api.win = win
+    api._win = win
     win.events.loaded += lambda: api.start()
     win.events.closed += lambda: api.tray and api.tray.stop()
     api.init_tray()
@@ -595,7 +605,7 @@ class ViewerAPI(_WindowPusher):
             self.runner.call(self.client.request_elevation)
 
     def pickAndSendFile(self):
-        win = self.win
+        win = self._win
         result = win.create_file_dialog(webview.OPEN_DIALOG) if win else None
         if result and self.client:
             self.runner.submit(self.client.send_file(result[0]))
@@ -622,7 +632,7 @@ def open_viewer_window(server_arg: str | None, runner: AsyncRunner, preset: dict
     api = ViewerAPI(runner, preset)
     opts = {"width": 1100, "height": 720, "min_size": (640, 420), **win_kw}
     win = webview.create_window("RDesk - צופה", url=_index_html() + "#viewer", js_api=api, **opts)
-    api.win = win
+    api._win = win
     return api
 
 
