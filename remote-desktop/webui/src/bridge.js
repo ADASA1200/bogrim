@@ -50,6 +50,10 @@ async function mockCall(method, args) {
       session: null,
     }),
     getClipboardText: () => "דוגמה שהודבקה מהלוח",
+    getConnectionLog: () => [
+      { peer: "v1a2b3c4d5e6", mode: "interactive", startedAt: Date.now() / 1000 - 600, endedAt: Date.now() / 1000 - 540 },
+    ],
+    getTrustedDevices: () => [{ peer: "444555666", perms: { control: true, clipboard: true, files: true } }],
   };
   await new Promise((r) => setTimeout(r, 150));
   return mocks[method] ? mocks[method]() : null;

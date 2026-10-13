@@ -6,6 +6,7 @@ export function ApprovalModal({ info, onDone }) {
   const [control, setControl] = useState(true);
   const [clipboard, setClipboard] = useState(true);
   const [files, setFiles] = useState(true);
+  const [remember, setRemember] = useState(false);
   const [left, setLeft] = useState(30);
 
   useEffect(() => {
@@ -25,17 +26,24 @@ export function ApprovalModal({ info, onDone }) {
 
   return (
     <Modal title="בקשת חיבור" onClose={() => respond(null)}>
-      <p>מישהו מבקש להתחבר למחשב שלך. לאפשר?</p>
+      <p>
+        מישהו מבקש להתחבר למחשב שלך (מזהה <span className="ltr">{info.peer}</span>). לאפשר?
+      </p>
       <div className="mt-2" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <Checkbox label="אפשר שליטה (עכבר ומקלדת)" checked={control} onChange={(e) => setControl(e.target.checked)} />
         <Checkbox label="אפשר סנכרון לוח" checked={clipboard} onChange={(e) => setClipboard(e.target.checked)} />
         <Checkbox label="אפשר העברת קבצים" checked={files} onChange={(e) => setFiles(e.target.checked)} />
+        <Checkbox
+          label="זכור מכשיר זה ואל תבקש אישור בפעם הבאה"
+          checked={remember}
+          onChange={(e) => setRemember(e.target.checked)}
+        />
       </div>
       <p className="text-faint mt-2">בקשה תפוג אוטומטית בעוד {left} שניות</p>
       <div className="modal-actions">
         <Button
           variant="primary"
-          onClick={() => respond({ control, clipboard, files, chat: true })}
+          onClick={() => respond({ control, clipboard, files, chat: true, remember })}
         >
           אשר
         </Button>

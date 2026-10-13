@@ -128,6 +128,7 @@ function SessionPanel({ state, setState }) {
   return (
     <>
       {session.mode === "unattended" && <Pill tone="warn">גישה ללא נוכחות (ללא אישור)</Pill>}
+      {session.mode === "trusted" && <Pill tone="success">מכשיר מהימן (אושר אוטומטית)</Pill>}
       <p className="text-faint mt-1">קוד אבטחה: {session.code}</p>
       <div className="row mt-2" style={{ gap: 16, flexWrap: "wrap" }}>
         <Checkbox label="קבצים" checked={session.perms.files} onChange={(e) => togglePerm("files", e.target.checked)} />

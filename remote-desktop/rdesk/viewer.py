@@ -10,7 +10,7 @@ from typing import Callable
 import websockets
 from aiortc import RTCConfiguration, RTCPeerConnection, RTCSessionDescription
 
-from . import protocol as P
+from . import config, protocol as P
 from .clipboard import Clipboard
 from .files import FileTransfer
 from .host import make_rtc_config
@@ -55,7 +55,9 @@ class ViewerClient:
     async def connect(self, host_id: str, password: str = "", timeout: float = 90) -> None:
         """password אופציונלי: סיסמת גישה ללא נוכחות. בלעדיה ממתינים לאישור המשתמש."""
         host_id = P.clean_id(host_id)
-        me = "v" + P.new_nonce()[:12]
+        # מזהה קבוע (לא אקראי-חדש-בכל-חיבור) - כדי שמארח יוכל "לזכור" את הצופה
+        # הזה בין התחברויות (אמון תמידי למזהה ספציפי).
+        me = config.viewer_identity(config.load())
         async with websockets.connect(self.server_url, max_size=P.MAX_SIGNAL_BYTES) as ws:
             await ws.send(P.dumps({"type": "register", "id": me}))
             await self._expect(ws, "registered", 10)

@@ -7,6 +7,7 @@ Pillow>=10
 numpy>=1.26
 truststore>=0.9      # אמון בחנות התעודות של מערכת ההפעלה ל-wss:// (לא משבית אימות)
 pywebview>=6.0       # חלון דפדפן מקומי לממשק ה-React
+pystray>=0.19        # אייקון מגש-מערכת; בלינוקס דורש גם GTK/AppIndicator של המערכת
 python-bidi>=0.4; sys_platform == "linux"   # עברית תקינה ב-Tk של Linux
 # לבדיקות בלבד:
 pytest>=8

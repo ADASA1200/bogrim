@@ -4,6 +4,7 @@ import { Tabs } from "../components/ui";
 import { pushToast } from "../components/ui";
 import { MainTab } from "./MainTab";
 import { SettingsTab } from "./SettingsTab";
+import { HistoryTab } from "./HistoryTab";
 import { ApprovalModal } from "./ApprovalModal";
 
 const REASONS = {
@@ -80,11 +81,14 @@ export default function HostApp() {
         onChange={setTab}
         tabs={[
           { key: "main", label: "ראשי" },
+          { key: "history", label: "יומן" },
           { key: "settings", label: "הגדרות" },
         ]}
       />
       <div className="scroll-area">
-        {tab === "main" ? <MainTab state={state} setState={setState} /> : <SettingsTab state={state} setState={setState} />}
+        {tab === "main" && <MainTab state={state} setState={setState} />}
+        {tab === "history" && <HistoryTab />}
+        {tab === "settings" && <SettingsTab state={state} setState={setState} />}
       </div>
       {pendingAsk && (
         <ApprovalModal

@@ -15,7 +15,7 @@ WEBUI_DIST = ROOT / "webui" / "dist"
 # sv_ttk/darkdetect: ל-tkinter הישן (--legacy-ui). webview: חלון הדפדפן המקומי
 # לממשק ה-React - על Windows צריך גם clr_loader/pythonnet עבור WebView2.
 COLLECT_ALL = ["aiortc", "aioice", "pylibsrtp", "av", "pyee", "google_crc32c",
-               "sv_ttk", "darkdetect", "webview", "clr_loader"]
+               "sv_ttk", "darkdetect", "webview", "clr_loader", "pystray"]
 SUBMODULES = ["pynput", "mss", "websockets", "rdesk"]
 if sys.platform.startswith("linux"):
     SUBMODULES.append("Xlib")     # backend של pynput ב-X11

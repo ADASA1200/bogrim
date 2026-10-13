@@ -64,6 +64,7 @@ class HostService:
         rtc_config: RTCConfiguration | None = None,
         unattended_key: bytes | None = None,
         unattended_perms: P.Permissions | None = None,
+        trust_check: Callable[[str], Optional[P.Permissions]] | None = None,
     ) -> None:
         self.server_url = server_url
         self.id = host_id
@@ -78,6 +79,9 @@ class HostService:
         self.injector = injector
         self.clipboard = clipboard or Clipboard()
         self.approval = approval
+        # הרשאות שמורות למזהה ספציפי ("זכור את המכשיר הזה" בחלון האישור) -
+        # מדלגות על בקשת האישור, בלי להיות תלויות בסיסמת גישה ללא נוכחות גלובלית.
+        self.trust_check = trust_check
         self.on_event = on_event or (lambda kind, **kw: None)
         self.download_dir = Path(download_dir)
         self.rtc_config = rtc_config or make_rtc_config()
@@ -197,8 +201,11 @@ class HostService:
 
     # ------------------------------------------------------------ סשן
     async def _accept_offer(self, peer: str, nonce: str, sdp: str, key: bytes | None, mode: str) -> None:
+        trusted_perms = None if mode == "unattended" or self.trust_check is None else self.trust_check(peer)
         if mode == "unattended":
             perms = P.Permissions(**self.unattended_perms.to_json())   # בלי אישור
+        elif trusted_perms is not None:
+            perms, mode = trusted_perms, "trusted"   # מזהה שסומן "זכור" בעבר - בלי אישור
         elif self.approval is not None:
             perms = await self.approval({"peer": peer})
         else:

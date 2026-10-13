@@ -17,7 +17,7 @@ from pathlib import Path
 
 import webview
 
-from . import config, embedded as E, protocol as P
+from . import config, connlog, embedded as E, protocol as P
 from .aio import AsyncRunner
 from .clipboard import Clipboard
 from .host import HostService
@@ -90,16 +90,22 @@ class HostAPI(_WindowPusher):
         self.embedded_on, self.embedded_port = emb_on, emb_port
         self.embedded: E.EmbeddedServer | None = None
         self._pending: dict[str, asyncio.Future] = {}
+        self._pending_peer: dict[str, str] = {}
         self._online = False
         self._session_mode: str | None = None
         self._session_code: str | None = None
         self._started = False
+        self.tray = None
 
         host_server = f"ws://127.0.0.1:{emb_port}" if emb_on else self.server
         self.service = HostService(
             host_server, self.id, approval=self._approval, on_event=self._on_event,
             unattended_key=key, unattended_perms=uperms, injector=injector, screen=screen,
+            trust_check=self._check_trust,
         )
+
+    def _check_trust(self, peer: str) -> P.Permissions | None:
+        return config.get_trusted(self.cfg, peer)
 
     def start(self) -> None:
         # win.events.loaded עלול לירות יותר מפעם אחת (ניווט/טעינה חוזרת) -
@@ -130,6 +136,38 @@ class HostAPI(_WindowPusher):
             ip = await self.embedded.fill_public_ip()
             self.push("embedded_update", {"publicIp": ip})
 
+    def init_tray(self) -> None:
+        """אייקון מגש-מערכת שקט וקבוע ליד השעון: פתיחה בלחיצה, והופך לאדום
+        מהבהב כל עוד מישהו מחובר (או מחכה לאישור). סוגרים את החלון -> מוסתר
+        למגש בלבד, לא יציאה מהאפליקציה (ראו _on_window_closing)."""
+        from . import tray
+
+        self.tray = tray.TrayIcon(self._tray_open, self._tray_disconnect, self._tray_quit)
+        self.tray.start()
+        if self.win is not None:
+            self.win.events.closing += self._on_window_closing
+
+    def _on_window_closing(self):
+        if self.tray is not None and self.tray.available:
+            self.win.hide()
+            return False  # מבטל את הסגירה בפועל - נשארים ברקע עם האייקון
+        return None
+
+    def _tray_open(self) -> None:
+        if self.win is not None:
+            self.win.show()
+            self.win.restore()
+
+    def _tray_disconnect(self) -> None:
+        self.disconnect()
+
+    def _tray_quit(self) -> None:
+        if self.win is not None:
+            try:
+                self.win.destroy()
+            except Exception:
+                pass
+
     def _on_event(self, kind: str, **kw) -> None:
         if kind == "status":
             self._online = bool(kw.get("online"))
@@ -137,9 +175,15 @@ class HostAPI(_WindowPusher):
         elif kind == "session_start":
             self._session_mode, self._session_code = kw["mode"], kw["code"]
             self.push("session_start", {"peer": kw["peer"], "perms": kw["perms"], "mode": kw["mode"], "code": kw["code"]})
+            if self.tray is not None:
+                self.tray.set_connected(True, kw.get("peer", ""))
+            connlog.start_entry(kw["peer"], kw["mode"], kw["perms"])
         elif kind == "session_end":
             self._session_mode = self._session_code = None
             self.push("session_end", {})
+            if self.tray is not None:
+                self.tray.set_connected(False)
+            connlog.end_last(kw.get("peer", ""))
         elif kind == "chat":
             self.push("chat", {"text": kw["text"]})
         elif kind == "alert":
@@ -155,13 +199,25 @@ class HostAPI(_WindowPusher):
         req_id = uuid.uuid4().hex
         fut: asyncio.Future = asyncio.get_running_loop().create_future()
         self._pending[req_id] = fut
+        self._pending_peer[req_id] = info["peer"]
+        # בקשת חיבור שדורשת אישור אנושי - מציגים את החלון (אולי מוסתר למגש)
+        # כדי שהמשתמש בכלל יראה את חלון האישור, ומדליקים את האייקון כ"מחכה".
+        if self.win is not None:
+            self.win.show()
+            self.win.restore()
+        if self.tray is not None:
+            self.tray.set_connected(True, info.get("peer", ""))
         self.push("ask_approval", {"requestId": req_id, "peer": info["peer"]})
         try:
-            return await asyncio.wait_for(fut, APPROVAL_TIMEOUT)
+            result = await asyncio.wait_for(fut, APPROVAL_TIMEOUT)
         except asyncio.TimeoutError:
-            return None
+            result = None
         finally:
             self._pending.pop(req_id, None)
+            self._pending_peer.pop(req_id, None)
+        if result is None and self._session_mode is None and self.tray is not None:
+            self.tray.set_connected(False)  # נדחה/נפל בזמן - בלי session_start שיטפל בזה
+        return result
 
     # ---------------------------------------------------------------- JS API
     def getState(self):
@@ -245,7 +301,26 @@ class HostAPI(_WindowPusher):
         result = None if perms is None else P.Permissions(
             control=bool(perms.get("control")), clipboard=bool(perms.get("clipboard")),
             files=bool(perms.get("files")), chat=True)
+        if result is not None and perms.get("remember"):
+            peer = self._pending_peer.get(req_id)
+            if peer:
+                self.cfg = config.load()
+                config.set_trusted(self.cfg, peer, result)
         self.runner.call(lambda: (not fut.done()) and fut.set_result(result))
+
+    def getConnectionLog(self, limit: int = 50):
+        return connlog.recent(limit)
+
+    def clearConnectionLog(self) -> None:
+        connlog.clear()
+
+    def getTrustedDevices(self):
+        self.cfg = config.load()
+        return [{"peer": peer, "perms": perms} for peer, perms in config.list_trusted(self.cfg).items()]
+
+    def removeTrustedDevice(self, peer: str) -> None:
+        self.cfg = config.load()
+        config.remove_trusted(self.cfg, peer)
 
 
 def open_host_window(server_arg: str | None, runner: AsyncRunner, **win_kw) -> HostAPI:
@@ -254,6 +329,8 @@ def open_host_window(server_arg: str | None, runner: AsyncRunner, **win_kw) -> H
     win = webview.create_window("RDesk", url=_index_html(), js_api=api, **opts)
     api.win = win
     win.events.loaded += lambda: api.start()
+    win.events.closed += lambda: api.tray and api.tray.stop()
+    api.init_tray()
     return api
 
 

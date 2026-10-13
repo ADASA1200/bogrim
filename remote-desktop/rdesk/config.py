@@ -37,6 +37,16 @@ def host_identity(cfg: dict) -> str:
     return cfg["id"]
 
 
+def viewer_identity(cfg: dict) -> str:
+    """מזהה פנימי קבוע לצופה הזה (לא המזהה החיוג - זה רק למארחים לזהות
+    "אותו מכשיר" בין התחברויות, כדי ש"אמון תמידי" יעבוד בכלל). נוצר פעם אחת ונשמר,
+    בניגוד למזהה אקראי-חדש-בכל-חיבור."""
+    if not cfg.get("viewer_id"):
+        cfg["viewer_id"] = "v" + P.new_nonce()[:12]
+        save(cfg)
+    return cfg["viewer_id"]
+
+
 # ---- גישה ללא נוכחות -------------------------------------------------
 MIN_UNATTENDED_LEN = 8
 
@@ -88,4 +98,27 @@ def get_embedded(cfg: dict) -> tuple[bool, int]:
 
 def set_embedded(cfg: dict, enabled: bool, port: int = DEFAULT_EMBEDDED_PORT) -> None:
     cfg["embedded_server"] = {"enabled": bool(enabled), "port": int(port)}
+    save(cfg)
+
+
+# ---- פרופילי הרשאה שמורים (אמון תמידי למזהה ספציפי) ---------------------
+def get_trusted(cfg: dict, peer: str) -> P.Permissions | None:
+    """הרשאות שמורות עבור מזהה ספציפי - מדלג על בקשת האישור הרגילה, בלי צורך בסיסמה גלובלית."""
+    t = (cfg.get("trusted") or {}).get(peer)
+    if t is None:
+        return None
+    return P.Permissions(**{k: bool(v) for k, v in t.items() if k in P.Permissions.__dataclass_fields__})
+
+
+def list_trusted(cfg: dict) -> dict[str, dict]:
+    return dict(cfg.get("trusted") or {})
+
+
+def set_trusted(cfg: dict, peer: str, perms: P.Permissions) -> None:
+    cfg.setdefault("trusted", {})[peer] = perms.to_json()
+    save(cfg)
+
+
+def remove_trusted(cfg: dict, peer: str) -> None:
+    (cfg.get("trusted") or {}).pop(peer, None)
     save(cfg)

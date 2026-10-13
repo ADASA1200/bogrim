@@ -68,6 +68,45 @@ async def test_host_serves_its_own_signaling_no_third_party_server(tmp_path):
         await srv.close()
 
 
+async def test_trust_check_bypasses_approval(tmp_path):
+    """פרופיל הרשאה שמור ("זכור מכשיר זה") - trust_check מדלג על approval
+    לגמרי ומסמן את הסשן כ-mode="trusted"."""
+    port = 18904
+    srv = await embedded.start(port)
+    try:
+        approval_calls = []
+
+        async def approve(info):
+            approval_calls.append(info)
+            return None   # לא אמור להיקרא בכלל אם trust_check תפס
+
+        def trust_check(peer):
+            return P.Permissions(control=True, clipboard=False, files=True, chat=True)
+
+        events = []
+        host = HostService(
+            f"ws://127.0.0.1:{port}", "555555555", screen=SyntheticScreen(), injector=NullInjector(),
+            clipboard=MemoryClipboard(), approval=approve, trust_check=trust_check,
+            on_event=lambda k, **kw: events.append((k, kw)),
+            download_dir=tmp_path / "recv", rtc_config=make_rtc_config([]),
+        )
+        task = asyncio.ensure_future(host.run())
+        await asyncio.wait_for(host.registered.wait(), 5)
+
+        v = ViewerClient(f"ws://127.0.0.1:{port}", clipboard=MemoryClipboard())
+        await v.connect("555555555")
+        assert v.connected
+        assert v.perms.clipboard is False   # ההרשאות שהגיעו מ-trust_check, לא ברירת מחדל
+        assert approval_calls == []
+        assert any(k == "session_start" and kw.get("mode") == "trusted" for k, kw in events)
+
+        await v.disconnect()
+        await host.stop()
+        task.cancel()
+    finally:
+        await srv.close()
+
+
 async def test_two_embedded_hosts_different_ports_are_independent(tmp_path):
     srv_a = await embedded.start(18902)
     srv_b = await embedded.start(18903)
