@@ -18,7 +18,7 @@ from pathlib import Path
 
 import webview
 
-from . import acl, config, connlog, embedded as E, protocol as P, wol
+from . import account_client, acl, config, connlog, embedded as E, protocol as P, wol
 from .aio import AsyncRunner
 from .clipboard import Clipboard
 from .host import HostService
@@ -383,6 +383,53 @@ class HostAPI(_WindowPusher):
     def removeTrustedDevice(self, peer: str) -> None:
         self.cfg = config.load()
         config.remove_trusted(self.cfg, peer)
+
+    # ---------------------------------------------- חשבון + פנקס כתובות
+    def getAccountState(self) -> dict:
+        self.cfg = config.load()
+        acct = config.get_account(self.cfg)
+        return {"loggedIn": acct is not None, "username": acct["username"] if acct else None}
+
+    def registerAccount(self, username: str, password: str) -> dict:
+        fut = self.runner.submit(account_client.register(self.server, username, password))
+        try:
+            fut.result(10)
+        except Exception as e:
+            raise Exception(str(e)) from None
+        return self.loginAccount(username, password)
+
+    def loginAccount(self, username: str, password: str) -> dict:
+        fut = self.runner.submit(account_client.login_and_get_contacts(self.server, username, password))
+        try:
+            contacts = fut.result(10)
+        except Exception as e:
+            raise Exception(str(e)) from None
+        self.cfg = config.load()
+        config.set_account(self.cfg, username, password, contacts)
+        return {"loggedIn": True, "username": username, "contacts": contacts}
+
+    def logoutAccount(self) -> None:
+        self.cfg = config.load()
+        config.set_account(self.cfg, None, None)
+
+    def getAddressBook(self) -> list:
+        self.cfg = config.load()
+        acct = config.get_account(self.cfg)
+        return acct["contacts"] if acct else []
+
+    def setAddressBook(self, contacts: list) -> None:
+        self.cfg = config.load()
+        acct = config.get_account(self.cfg)
+        if not acct:
+            raise Exception("not_logged_in")
+        fut = self.runner.submit(
+            account_client.set_contacts(self.server, acct["username"], acct["password"], contacts))
+        try:
+            fut.result(10)
+        except Exception as e:
+            raise Exception(str(e)) from None
+        self.cfg = config.load()
+        config.set_account_contacts(self.cfg, contacts)
 
 
 def open_host_window(server_arg: str | None, runner: AsyncRunner, **win_kw) -> HostAPI:

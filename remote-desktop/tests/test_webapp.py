@@ -444,3 +444,65 @@ async def test_start_tunnel_via_viewer_api_relays_real_bytes(host_api, host_even
     finally:
         echo_srv.close()
         await echo_srv.wait_closed()
+
+
+async def _start_signaling_on_runner(runner, port, accounts_path):
+    """מריצים גם את שרת האיתות על הלולאה של runner (לא על לולאת הבדיקה) -
+    חיבור בין שתי לולאות asyncio שונות בתוך אותו תהליך נתקע בסנדבוקס הזה
+    (זה לא מתאים לייצור, שם הלקוח מתחבר לתהליך/מחשב אחר לגמרי ממילא)."""
+    from rdesk.signaling_server import serve as serve_signaling
+    return await asyncio.wrap_future(runner.submit(serve_signaling("127.0.0.1", port, accounts_path=accounts_path)))
+
+
+async def _stop_signaling_on_runner(runner, ws_server):
+    async def _close():
+        ws_server.close()
+        await ws_server.wait_closed()
+    await asyncio.wrap_future(runner.submit(_close()))
+
+
+async def test_account_register_login_and_address_book(tmp_path, runner, monkeypatch):
+    monkeypatch.setattr(webapp.config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(webapp.config, "CONFIG_FILE", tmp_path / "config.json")
+    port = free_port()
+    ws_server = await _start_signaling_on_runner(runner, port, tmp_path / "accounts.json")
+    try:
+        api = webapp.HostAPI(None, runner, injector=NullInjector(), screen=SyntheticScreen())
+        api.server = f"ws://127.0.0.1:{port}"
+
+        assert api.getAccountState() == {"loggedIn": False, "username": None}
+
+        r = api.registerAccount("alice", "a-long-enough-password")
+        assert r["loggedIn"] is True
+        assert r["contacts"] == []
+        assert api.getAccountState() == {"loggedIn": True, "username": "alice"}
+
+        api.setAddressBook([{"id": "111222333", "label": "חבר"}])
+        assert api.getAddressBook() == [{"id": "111222333", "label": "חבר"}]
+
+        # דף חדש (למשל הפעלה מחדש של האפליקציה) - הפרטים נטענים מהדיסק ומתחברים מחדש
+        api2 = webapp.HostAPI(None, runner, injector=NullInjector(), screen=SyntheticScreen())
+        api2.server = f"ws://127.0.0.1:{port}"
+        assert api2.getAccountState() == {"loggedIn": True, "username": "alice"}
+        assert api2.getAddressBook() == [{"id": "111222333", "label": "חבר"}]
+
+        api2.logoutAccount()
+        assert api2.getAccountState() == {"loggedIn": False, "username": None}
+    finally:
+        await _stop_signaling_on_runner(runner, ws_server)
+
+
+async def test_login_account_wrong_password_raises(tmp_path, runner, monkeypatch):
+    monkeypatch.setattr(webapp.config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(webapp.config, "CONFIG_FILE", tmp_path / "config.json")
+    port = free_port()
+    ws_server = await _start_signaling_on_runner(runner, port, tmp_path / "accounts.json")
+    try:
+        api = webapp.HostAPI(None, runner, injector=NullInjector(), screen=SyntheticScreen())
+        api.server = f"ws://127.0.0.1:{port}"
+        api.registerAccount("alice", "a-long-enough-password")
+
+        with pytest.raises(Exception, match="bad_credentials"):
+            api.loginAccount("alice", "wrong-password")
+    finally:
+        await _stop_signaling_on_runner(runner, ws_server)

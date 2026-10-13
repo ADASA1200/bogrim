@@ -180,3 +180,26 @@ def set_wol_mac(cfg: dict, host_id: str, mac: str | None) -> None:
     else:
         w.pop(host_id, None)
     save(cfg)
+
+
+# ---- חשבון + פנקס כתובות משותף (שרת קל, לא שירות בענן בתשלום) -----------
+# הסיסמה נשמרת כאן בטקסט רגיל (לא hash) כי השרת צריך אותה שוב בכל login -
+# אותו קובץ 0600 שבו כבר שמור המפתח הנגזר לגישה ללא-נוכחות, שחשיפתו כבר
+# חמורה בהרבה משליטה-מרחוק מלאה; אין כאן הרחבה אמיתית של משטח התקיפה.
+def get_account(cfg: dict) -> dict | None:
+    return cfg.get("account")
+
+
+def set_account(cfg: dict, username: str | None, password: str | None, contacts: list | None = None) -> None:
+    if username is None:
+        cfg.pop("account", None)
+    else:
+        cfg["account"] = {"username": username, "password": password, "contacts": contacts or []}
+    save(cfg)
+
+
+def set_account_contacts(cfg: dict, contacts: list) -> None:
+    acct = cfg.get("account")
+    if acct:
+        acct["contacts"] = contacts
+        save(cfg)

@@ -34,6 +34,7 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8765)
     s.add_argument("--certfile"); s.add_argument("--keyfile")
+    s.add_argument("--accounts-file", help=S.CLI_ACCOUNTS_FILE)
 
     h = sub.add_parser("host", help=S.CLI_HOST)
     h.add_argument("--server")
@@ -58,7 +59,7 @@ def main(argv: list[str] | None = None) -> None:
         _run_host_ui(getattr(args, "server", None), getattr(args, "legacy_ui", False))
     elif args.cmd == "server":
         from .signaling_server import run_forever
-        asyncio.run(run_forever(args.host, args.port, args.certfile, args.keyfile))
+        asyncio.run(run_forever(args.host, args.port, args.certfile, args.keyfile, args.accounts_file))
     elif args.cmd == "host":
         if args.headless:
             asyncio.run(_headless_host(args))

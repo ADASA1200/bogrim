@@ -18,6 +18,7 @@ from collections import defaultdict
 import websockets
 
 from . import protocol as P
+from .accounts import AccountStore
 
 log = logging.getLogger("rdesk.server")
 
@@ -26,9 +27,15 @@ MSGS_PER_SECOND = 20
 
 
 class SignalingServer:
-    def __init__(self) -> None:
+    """``accounts_path``: אם ניתן, מפעיל חשבון+פנקס כתובות משותף (ראו
+    accounts.py) - גרסה מצומצמת, host-it-yourself, לא שירות ענן בתשלום.
+    None (ברירת המחדל) משבית את התכונה כליל - גם במצב embedded לא יוצרים
+    קובץ חשבונות בלי שהתבקש."""
+
+    def __init__(self, accounts_path=None) -> None:
         self.clients: dict[str, object] = {}
         self.per_ip: dict[str, int] = defaultdict(int)
+        self.accounts = AccountStore(accounts_path) if accounts_path else None
 
     async def handler(self, ws) -> None:
         ip = (ws.remote_address or ("?",))[0]
@@ -37,6 +44,7 @@ class SignalingServer:
             return
         self.per_ip[ip] += 1
         my_id = None
+        account: str | None = None
         window_start, count = time.monotonic(), 0
         try:
             async for raw in ws:
@@ -78,6 +86,39 @@ class SignalingServer:
                     await target.send(P.dumps({
                         "type": "relay", "from": my_id, "from_ip": ip, "payload": msg.get("payload"),
                     }))
+                elif kind == "account_register":
+                    if self.accounts is None:
+                        await ws.send(P.dumps({"type": "account_error", "reason": "accounts_disabled"}))
+                        continue
+                    try:
+                        self.accounts.register(str(msg.get("username", "")), str(msg.get("password", "")))
+                    except ValueError as e:
+                        await ws.send(P.dumps({"type": "account_error", "reason": str(e)}))
+                        continue
+                    account = str(msg.get("username", ""))
+                    await ws.send(P.dumps({"type": "account_ok"}))
+                elif kind == "account_login":
+                    if self.accounts is None:
+                        await ws.send(P.dumps({"type": "account_error", "reason": "accounts_disabled"}))
+                        continue
+                    username = str(msg.get("username", ""))
+                    if not self.accounts.verify(username, str(msg.get("password", ""))):
+                        await ws.send(P.dumps({"type": "account_error", "reason": "bad_credentials"}))
+                        continue
+                    account = username
+                    await ws.send(P.dumps({"type": "account_ok"}))
+                elif kind == "address_book_get":
+                    if self.accounts is None or account is None:
+                        await ws.send(P.dumps({"type": "account_error", "reason": "not_logged_in"}))
+                        continue
+                    contacts = self.accounts.get_contacts(account)
+                    await ws.send(P.dumps({"type": "address_book", "contacts": contacts}))
+                elif kind == "address_book_set":
+                    if self.accounts is None or account is None:
+                        await ws.send(P.dumps({"type": "account_error", "reason": "not_logged_in"}))
+                        continue
+                    self.accounts.set_contacts(account, msg.get("contacts") or [])
+                    await ws.send(P.dumps({"type": "account_ok"}))
         except websockets.ConnectionClosed:
             pass
         finally:
@@ -87,12 +128,13 @@ class SignalingServer:
 
 
 async def serve(host: str = "127.0.0.1", port: int = 8765,
-                certfile: str | None = None, keyfile: str | None = None):
+                certfile: str | None = None, keyfile: str | None = None,
+                accounts_path=None):
     ctx = None
     if certfile:
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(certfile, keyfile)
-    server = SignalingServer()
+    server = SignalingServer(accounts_path=accounts_path)
     ws_server = await websockets.serve(
         server.handler, host, port, ssl=ctx, max_size=P.MAX_SIGNAL_BYTES,
     )
@@ -101,6 +143,6 @@ async def serve(host: str = "127.0.0.1", port: int = 8765,
     return ws_server
 
 
-async def run_forever(host: str, port: int, certfile=None, keyfile=None) -> None:
-    ws_server = await serve(host, port, certfile, keyfile)
+async def run_forever(host: str, port: int, certfile=None, keyfile=None, accounts_path=None) -> None:
+    ws_server = await serve(host, port, certfile, keyfile, accounts_path)
     await ws_server.wait_closed()

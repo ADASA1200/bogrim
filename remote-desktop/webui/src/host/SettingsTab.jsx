@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { callApi } from "../bridge";
 import { Button, Card, Checkbox, CopyButton, Field, Input, Pill, pushToast } from "../components/ui";
 
 export function SettingsTab({ state, setState }) {
   return (
     <>
+      <AccountCard />
       <UnattendedCard state={state} setState={setState} />
       <TotpCard state={state} setState={setState} />
       <InteractiveAccessCard state={state} setState={setState} />
@@ -12,6 +13,124 @@ export function SettingsTab({ state, setState }) {
       <ServerCard state={state} setState={setState} />
       <EmbeddedCard state={state} setState={setState} />
     </>
+  );
+}
+
+function AccountCard() {
+  const [account, setAccount] = useState(null);
+  const [contacts, setContacts] = useState([]);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [newContactId, setNewContactId] = useState("");
+  const [newContactLabel, setNewContactLabel] = useState("");
+
+  async function reload() {
+    const s = await callApi("getAccountState");
+    setAccount(s);
+    if (s.loggedIn) setContacts(await callApi("getAddressBook"));
+  }
+
+  useEffect(() => {
+    reload();
+  }, []);
+
+  async function doRegister() {
+    setBusy(true);
+    try {
+      const r = await callApi("registerAccount", username, password);
+      setAccount({ loggedIn: true, username: r.username });
+      setContacts(r.contacts || []);
+      setPassword("");
+      pushToast("החשבון נוצר ואתם מחוברים.");
+    } catch (e) {
+      pushToast("יצירת חשבון נכשלה: " + String(e?.message || e), "danger");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doLogin() {
+    setBusy(true);
+    try {
+      const r = await callApi("loginAccount", username, password);
+      setAccount({ loggedIn: true, username: r.username });
+      setContacts(r.contacts || []);
+      setPassword("");
+    } catch (e) {
+      pushToast("התחברות נכשלה: " + String(e?.message || e), "danger");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doLogout() {
+    await callApi("logoutAccount");
+    setAccount({ loggedIn: false, username: null });
+    setContacts([]);
+  }
+
+  async function addContact() {
+    const id = newContactId.replace(/\D/g, "");
+    if (!id) return;
+    const next = [...contacts, { id, label: newContactLabel || id }];
+    try {
+      await callApi("setAddressBook", next);
+      setContacts(next);
+      setNewContactId("");
+      setNewContactLabel("");
+    } catch (e) {
+      pushToast("השמירה נכשלה: " + String(e?.message || e), "danger");
+    }
+  }
+
+  async function removeContact(id) {
+    const next = contacts.filter((c) => c.id !== id);
+    await callApi("setAddressBook", next);
+    setContacts(next);
+  }
+
+  if (!account) return null;
+
+  return (
+    <Card title="חשבון + פנקס כתובות משותף" right={<Pill tone={account.loggedIn ? "success" : "muted"}>{account.loggedIn ? `מחובר כ-${account.username}` : "לא מחובר"}</Pill>}>
+      <p className="card-help">
+        מסנכרן פנקס אנשי-קשר בין כל המכשירים שמתחברים לאותו שרת עם אותו חשבון. גרסה מצומצמת שרצה על שרת האיתות שלכם -
+        לא שירות ענן בתשלום, בלי חיוב ובלי ניהול ארגון. דורש שרת איתות עצמאי (לא "המחשב הזה כשרת").
+      </p>
+      {!account.loggedIn ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <Field label="שם משתמש">
+            <Input dir="ltr" value={username} onChange={(e) => setUsername(e.target.value)} />
+          </Field>
+          <Field label="סיסמה">
+            <Input type="password" dir="ltr" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </Field>
+          <div className="row">
+            <Button variant="primary" loading={busy} onClick={doLogin}>התחבר</Button>
+            <Button variant="ghost" loading={busy} onClick={doRegister}>צור חשבון חדש</Button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {contacts.map((c) => (
+              <div key={c.id} className="row-between">
+                <span className="ltr">{c.label} - {c.id}</span>
+                <Button variant="ghost" size="sm" onClick={() => removeContact(c.id)}>הסר</Button>
+              </div>
+            ))}
+            {contacts.length === 0 && <div className="empty-state">הפנקס ריק</div>}
+          </div>
+          <div className="row">
+            <Input dir="ltr" placeholder="מזהה" style={{ maxWidth: 140 }} value={newContactId} onChange={(e) => setNewContactId(e.target.value)} />
+            <Input placeholder="תווית" value={newContactLabel} onChange={(e) => setNewContactLabel(e.target.value)} />
+            <Button variant="primary" size="sm" onClick={addContact}>הוסף</Button>
+          </div>
+          <Button variant="ghost" size="sm" onClick={doLogout}>התנתק מהחשבון</Button>
+        </div>
+      )}
+    </Card>
   );
 }
 
