@@ -1,30 +1,42 @@
 # prog-songs
 
-שירים חדשים מהאשכול "הסינגלים והקליפים החדשים" ב-prog.co.il -> כרטיס ב-Google Chat
-(שם, אמן, קרדיטים, כפתורי האזנה/הורדה, YouTube והפוסט).
+שירים חדשים מהאשכול "הסינגלים והקליפים החדשים" ב-prog.co.il -> **העלאה ישירה ל-Google Chat**
+(קובץ ה-mp3 + עטיפה כ-attachment, עם שם, קרדיטים, תאריך עברי, קישור לפוסט ול-YouTube).
+זה אותו מנגנון כמו בפרויקט "מיוזיק": `uploadBlobToChatRequest` + `createChatMessage` (messageId קבוע, בלי הודעות כפולות).
 
-כל הלוגיקה ב-Apps Script (`Code.gs`): פענוח הדף, מניעת כפילויות (Script Properties), בניית הכרטיס, שליחה וטריגר.
+## קבצים
+- `ProgSongs.gs` - **הקובץ הפעיל.** מוסיפים אותו כקובץ נוסף בפרויקט "מיוזיק". הוא משתמש בפונקציות ובקבועים שכבר קיימים שם
+  (`SPREADSHEET_ID`, `SPACE_ID`, `logMusic`, `uploadBlobToChatRequest`, `createChatMessage`, `convertToHebrewDate`,
+  פונקציות ה-ID3) ולא מגדיר אותם מחדש. כל השמות החדשים מתחילים ב-`prog`/`PROG_`.
+- `legacy-webhook/` - גרסה קודמת (כרטיס עם קישורים דרך webhook + גשר דפדפן). לא נחוץ אם הגישה הישירה עובדת.
 
-## הקמה
-1. **Chat:** בחדר Google Chat: *Apps & integrations > Webhooks* > צור webhook והעתק את הכתובת.
-2. **Apps Script:** פרויקט חדש. הדבק את `Code.gs`. ב-*Project Settings* הפעל "Show appsscript.json" והדבק את `appsscript.json`.
-3. **Project Settings > Script properties:**
-   - `CHAT_WEBHOOK_URL` = כתובת ה-webhook
-   - `SECRET` = מחרוזת אקראית ארוכה
-4. הרץ `testChat` (פעם ראשונה תתבקש הרשאה). אמורה להופיע הודעת בדיקה בחדר.
-5. **Deploy > New deployment > Web app:** Execute as *Me*, Who has access *Anyone*. העתק את כתובת ה-`/exec`.
+## הפעלה
+1. הדבק את `ProgSongs.gs` כקובץ חדש בפרויקט "מיוזיק".
+2. הרץ `diagnoseProgAccess` ובדוק ביומן שהדף וה-mp3 מחזירים HTTP 200 (ראה "חסימת Cloudflare" למטה).
+3. הרץ `inspectProgSongs` (קריאה בלבד): מדפיס אילו פוסטים נמצאו ואילו יישלחו.
+4. הרץ `runProgSongs` פעם אחת ידנית, ואז `installProgTrigger` (כל 10 דקות), או קרא ל-`runProgSongs()` מתוך `runAllMonitors`.
 
-## מקור הנתונים
-- **שליפה ישירה:** הרץ `installTrigger` (בודק כל 10 דקות). בבדיקה שלנו Cloudflare החזיר 403 לשרתי גוגל,
-  ואז `checkNewSongs` רק רושם ליומן שהבקשה נחסמה.
-- **גשר דפדפן** (כשהשליפה הישירה חסומה): התקן את `bridge.user.js` ב-Tampermonkey, פתח את האשכול
-  (`https://www.prog.co.il/threads/387726/latest`), ובתפריט Tampermonkey בחר *הגדר Web App URL + SECRET*.
-  הגשר רק מעביר את ה-HTML ל-`doPost`; הכל השאר קורה ב-Apps Script. אפשר להפעיל "רענון אוטומטי" ולהשאיר את הלשונית פתוחה.
+## לוגיקת העמודים
+מספר העמוד האחרון נשמר ב-Script Property `PROG_LAST_PAGE` (ברירת מחדל: `PROG_START_PAGE` = 1372).
+בכל ריצה: מביאים את העמוד השמור, ובודקים אם קיים עמוד הבא (`page-N+1`). אם XenForo מחזיר עמוד
+אחר ב-canonical, לא נוצר עמוד חדש. אם נוצר, מתקדמים אליו וסורקים גם את העמודים שדילגנו עליהם. אם לא נוצר,
+סורקים את שני העמודים האחרונים (N-1 ו-N). העמוד השמור מתקדם רק אם כל השירים בתור הושלמו.
 
-## הגדרות (`CONFIG` ב-`Code.gs`)
-`ONLY_AUTHORS` (סינון מחברים), `SEND_WITHOUT_AUDIO` (פוסט בלי mp3 כמו #27,424), `MAX_PER_RUN`, `TRIGGER_MINUTES`.
+## מעקב
+גיליון `פרוג` ב-`SPREADSHEET_ID` (נוצר אוטומטית): מצב `SENT` / `RETRY` / `FAILED`, מספר ניסיונות, שגיאה אחרונה, מזהי הודעות.
+אחרי `PROG_MAX_ATTEMPTS` כשלונות הפוסט מסומן `FAILED`; לניסיון חוזר מחק את השורה (או שנה את המצב ל-`RETRY` ואפס ניסיונות).
 
-## הערות
-- הכפתור "האזנה / הורדה" מצביע על קובץ ה-mp3 ב-`s3.prog.co.il`; הוא נפתח בדפדפן שלך.
-  Apps Script לא מעתיק את הקבצים (גם הם חסומים לו), ולכן אין עותק ב-Drive.
-- פוסט בלי אודיו לא מסומן כ"נשלח", כך שאם יתווסף לו קובץ בעריכה הוא יישלח בריצה הבאה.
+## הגדרות (בראש `ProgSongs.gs`)
+`PROG_MIN_POST_ID` (לא שולחים פוסטים ישנים יותר; ברירת מחדל = הפוסט הראשון בעמוד 1372), `PROG_ONLY_AUTHORS`,
+`PROG_MAX_PER_RUN`, `PROG_MAX_ATTEMPTS`.
+
+## התנהגות
+- **עטיפה:** התמונה מהפוסט; אם לא ירדה, תמונת האלבום מתוך ה-ID3 של הקובץ; אם אין, נשלח בלי עטיפה.
+- **עטיפה + קובץ:** שתי הודעות (טקסט+עטיפה, ואז הקובץ), כמו ב"מיוזיק".
+- **קובץ מעל 45MB** (`APPS_SCRIPT_DIRECT_UPLOAD_LIMIT_MB`): לא מורידים; נשלחת הודעה עם קישור הורדה.
+- **פוסט בלי mp3** (למשל #27,424): מדולג ולא נרשם, ונבדק שוב אם יתווסף קובץ.
+- קישור ה-Drive שבפוסטים הוא תיקייה כללית זהה בכל פוסט, ולכן לא נשלח.
+
+## חסימת Cloudflare
+בבדיקה מ-Apps Script (בלי שינוי) הדף וה-mp3 החזירו 403 של Cloudflare. כל עוד זה כך, `runProgSongs`
+רק רושם ליומן "prog.co.il חסם את הבקשה" ולא שולח דבר. `diagnoseProgAccess` מראה בדיוק מה נחסם.
