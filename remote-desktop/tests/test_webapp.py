@@ -62,7 +62,21 @@ def host_api(tmp_path, runner, host_events, monkeypatch):
     api = webapp.HostAPI(None, runner, injector=NullInjector(), screen=SyntheticScreen())
     api.push = recorder(host_events)
     api.start()
-    return api
+    yield api
+
+    # בלי סגירה מפורשת כאן, שרת האיתות המוטבע וה-HostService.run() של הבדיקה
+    # הזו נשארים פעילים ברקע עד ש-runner.stop() עוצר את הלולאה - וזה התחרות
+    # (race) שגרמה ל-Fatal Python error: Aborted בין Thread-ים שונים כשהבדיקות
+    # רבות מספיק כדי להצטבר. עדיף לסגור הכול באופן דטרמיניסטי כאן.
+    async def cleanup():
+        await api.service.stop()
+        if api.embedded is not None:
+            await api.embedded.close()
+
+    try:
+        runner.submit(cleanup()).result(timeout=5)
+    except Exception:
+        pass
 
 
 async def wait_online(api, timeout=5):
@@ -123,6 +137,49 @@ async def test_full_connect_approve_video_chat_disconnect(host_api, host_events,
     viewer_api.viewerDisconnect()
     assert await wait_for(lambda: any(k == "session_end" for k, _ in host_events))
     assert host_api.getState()["session"] is None
+
+
+class FakePrivacyGuard:
+    """תחליף ל-PrivacyGuard האמיתי - בודק רק את חיווט ה-API, בלי לתפוס קלט
+    פיזי או לפתוח חלון overlay אמיתי בתוך בדיקה אוטומטית."""
+
+    def __init__(self):
+        self.active = False
+
+    def enable(self):
+        self.active = True
+
+    def disable(self):
+        self.active = False
+
+
+async def test_privacy_mode_toggle_and_auto_disable_on_session_end(host_api, host_events, runner):
+    fake_privacy = FakePrivacyGuard()
+    host_api.service.privacy = fake_privacy
+    await wait_online(host_api)
+    port = host_api.embedded_port
+
+    viewer_api = webapp.ViewerAPI(runner, None)
+    viewer_events = []
+    viewer_api.push = recorder(viewer_events)
+
+    async def do_connect():
+        return await viewer_api._connect(f"ws://127.0.0.1:{port}", "135791357", "")
+
+    fut = runner.submit(do_connect())
+    assert await wait_for(lambda: any(k == "ask_approval" for k, _ in host_events), 10)
+    req = next(d for k, d in host_events if k == "ask_approval")
+    host_api.respondApproval(req["requestId"], {"control": True, "clipboard": True, "files": True, "chat": True})
+    await asyncio.wrap_future(fut)
+
+    assert not fake_privacy.active
+    host_api.setPrivacyMode(True)
+    assert await wait_for(lambda: fake_privacy.active, 5)
+    assert any(k == "privacy_changed" and d["enabled"] for k, d in host_events)
+
+    viewer_api.viewerDisconnect()
+    assert await wait_for(lambda: any(k == "session_end" for k, _ in host_events))
+    assert await wait_for(lambda: not fake_privacy.active, 5)   # לא משאירים נעול אחרי שהסשן נגמר
 
 
 async def test_approval_decline_and_timeout_path(host_api, host_events, runner):
@@ -266,3 +323,31 @@ async def test_remembering_a_device_wires_up_host_service_trust_check(host_api, 
 
     viewer.viewerDisconnect()
     assert await wait_for(lambda: any(k == "session_end" for k, _ in host_events))
+
+
+def test_wol_mac_round_trip_and_rejects_bad_mac(runner, tmp_path, monkeypatch):
+    monkeypatch.setattr(webapp.config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(webapp.config, "CONFIG_FILE", tmp_path / "config.json")
+    viewer = webapp.ViewerAPI(runner, None)
+
+    assert viewer.getWolMac("135791357") == ""
+    viewer.setWolMac("135791357", "AA:BB:CC:DD:EE:FF")
+    assert viewer.getWolMac("135791357") == "AA:BB:CC:DD:EE:FF"
+
+    with pytest.raises(Exception):
+        viewer.setWolMac("135791357", "not a mac")
+
+
+def test_wake_on_lan_sends_packet_for_saved_mac(runner, tmp_path, monkeypatch):
+    monkeypatch.setattr(webapp.config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(webapp.config, "CONFIG_FILE", tmp_path / "config.json")
+    sent = []
+    monkeypatch.setattr(webapp.wol, "send", lambda mac, **kw: sent.append(mac))
+
+    viewer = webapp.ViewerAPI(runner, None)
+    with pytest.raises(Exception, match="no_mac_saved"):
+        viewer.wakeOnLan("135791357")
+
+    viewer.setWolMac("135791357", "AA:BB:CC:DD:EE:FF")
+    viewer.wakeOnLan("135791357")
+    assert sent == ["AA:BB:CC:DD:EE:FF"]

@@ -12,7 +12,8 @@ from typing import Awaitable, Callable, Optional
 import websockets
 from aiortc import RTCConfiguration, RTCIceServer, RTCPeerConnection, RTCSessionDescription
 
-from . import protocol as P
+from . import acl, protocol as P
+from .privacy import PrivacyGuard
 from .capture import MssScreen, ScreenTrack
 from .clipboard import Clipboard
 from .files import FileTransfer
@@ -65,6 +66,10 @@ class HostService:
         unattended_key: bytes | None = None,
         unattended_perms: P.Permissions | None = None,
         trust_check: Callable[[str], Optional[P.Permissions]] | None = None,
+        ip_whitelist: list[str] | None = None,
+        totp_secret: str | None = None,
+        interactive_mode: str = "always",
+        window_open_check: Callable[[], bool] | None = None,
     ) -> None:
         self.server_url = server_url
         self.id = host_id
@@ -82,7 +87,17 @@ class HostService:
         # הרשאות שמורות למזהה ספציפי ("זכור את המכשיר הזה" בחלון האישור) -
         # מדלגות על בקשת האישור, בלי להיות תלויות בסיסמת גישה ללא נוכחות גלובלית.
         self.trust_check = trust_check
+        # בקרת גישה (כמו ה-ACL/2FA/Interactive-Access של AnyDesk): רשימת IP
+        # מורשים (רשימה ריקה = בלי הגבלה), קוד TOTP נוסף על סיסמת הגישה
+        # ללא-נוכחות, ומצב לחיבור אינטראקטיבי (תמיד לשאול / רק כשהחלון פתוח / לעולם לא).
+        self.ip_whitelist = ip_whitelist or []
+        self.totp_secret = totp_secret
+        self.interactive_mode = interactive_mode
+        self.window_open_check = window_open_check or (lambda: True)
         self.on_event = on_event or (lambda kind, **kw: None)
+        # מצב פרטיות (כמו AnyDesk): חוסם קלט מקומי פיזי + מכסה את הצג הפיזי
+        # בזמן סשן, בלי להשפיע על מה שהצופה המרוחק רואה/שולט בו.
+        self.privacy = PrivacyGuard()
         self.download_dir = Path(download_dir)
         self.rtc_config = rtc_config or make_rtc_config()
         self.ws = None
@@ -150,16 +165,20 @@ class HostService:
             self.on_event("error", reason=msg.get("reason"))
         elif kind == "relay":
             peer, payload = str(msg.get("from")), msg.get("payload") or {}
+            from_ip = msg.get("from_ip")
             try:
-                await self._on_peer(peer, payload)
+                await self._on_peer(peer, payload, from_ip)
             except Exception:
                 log.exception("error handling peer message")
                 await self._send(peer, {"kind": "reject", "reason": "internal error"})
 
-    async def _on_peer(self, peer: str, p: dict) -> None:
+    async def _on_peer(self, peer: str, p: dict, from_ip: str | None = None) -> None:
         k = p.get("kind")
         now = time.time()
         if k == "hello":
+            if not acl.ip_allowed(from_ip, self.ip_whitelist):
+                await self._send(peer, {"kind": "reject", "reason": "ip_blocked"})
+                return
             if self.session or self._busy_negotiating:
                 await self._send(peer, {"kind": "reject", "reason": "busy"})
                 return
@@ -190,7 +209,24 @@ class HostService:
                         self.on_event("alert", reason="blocked")
                     await self._send(peer, {"kind": "reject", "reason": "bad password"})
                     return
+                if self.totp_secret and not acl.totp_verify(self.totp_secret, str(p.get("totp") or "")):
+                    # סיסמה נכונה אבל בלי קוד דו-שלבי תקף - גם זה נחשב ניסיון כושל
+                    self._fails += 1
+                    if self._fails >= P.MAX_AUTH_ATTEMPTS:
+                        self._blocked_until = now + P.BLOCK_SECONDS
+                        self._fails = 0
+                        self.on_event("alert", reason="blocked")
+                    await self._send(peer, {"kind": "reject", "reason": "bad totp"})
+                    return
                 key, mode = self.unattended_key, "unattended"
+            elif self.interactive_mode == "never":
+                # גישה אינטראקטיבית כבויה כליל - רק גישה ללא-נוכחות עם סיסמה
+                await self._send(peer, {"kind": "reject", "reason": "interactive disabled"})
+                return
+            elif self.interactive_mode == "window_open" and not self.window_open_check():
+                # החלון מוסתר למגש - לא נוכל להציג בקשת אישור, אז לא ממתינים לסרק
+                await self._send(peer, {"kind": "reject", "reason": "window closed"})
+                return
             # בלי סיסמה (או כשאין סיסמה קבועה במארח): ממתינים לאישור המשתמש
             self._fails = 0
             self._busy_negotiating = True
@@ -326,6 +362,20 @@ class HostService:
         if perms is not None:
             self.unattended_perms = perms
 
+    def set_ip_whitelist(self, entries: list[str]) -> None:
+        self.ip_whitelist = list(entries or [])
+
+    def set_totp_secret(self, secret: str | None) -> None:
+        self.totp_secret = secret
+
+    def set_interactive_mode(self, mode: str) -> None:
+        self.interactive_mode = mode
+
+    def set_privacy_mode(self, enabled: bool) -> None:
+        if not self.session:
+            return
+        self.privacy.enable() if enabled else self.privacy.disable()
+
     def send_chat(self, text: str) -> None:
         if self.session:
             self._ctl_send(self.session, {"t": "chat", "text": text[:2000]})
@@ -354,6 +404,7 @@ class HostService:
         if sess.closed:
             return
         sess.closed = True
+        self.privacy.disable()   # לא משאירים את המחשב נעול/חוסם קלט אחרי שהסשן נגמר
         for t in sess.tasks:
             t.cancel()
         if sess.files:

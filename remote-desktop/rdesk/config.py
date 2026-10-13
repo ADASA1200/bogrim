@@ -122,3 +122,61 @@ def set_trusted(cfg: dict, peer: str, perms: P.Permissions) -> None:
 def remove_trusted(cfg: dict, peer: str) -> None:
     (cfg.get("trusted") or {}).pop(peer, None)
     save(cfg)
+
+
+# ---- בקרת גישה: רשימת IP מורשים + אימות דו-שלבי (TOTP) ------------------
+def get_ip_whitelist(cfg: dict) -> list[str]:
+    return list(cfg.get("ip_whitelist") or [])
+
+
+def set_ip_whitelist(cfg: dict, entries: list[str]) -> None:
+    cfg["ip_whitelist"] = [str(e).strip() for e in entries if str(e).strip()]
+    save(cfg)
+
+
+def get_totp_secret(cfg: dict) -> str | None:
+    """קוד דו-שלבי נוסף על סיסמת הגישה ללא-נוכחות (לא רלוונטי לחיבור אינטראקטיבי,
+    שכבר דורש אישור אנושי חי - זה מחזק בדיוק את המקרה שאין בו נוכחות)."""
+    return (cfg.get("unattended") or {}).get("totp_secret")
+
+
+def set_totp_secret(cfg: dict, secret: str | None) -> None:
+    u = cfg.setdefault("unattended", {})
+    if secret:
+        u["totp_secret"] = secret
+    else:
+        u.pop("totp_secret", None)
+    save(cfg)
+
+
+# ---- מצב בקשת-אישור לחיבור אינטראקטיבי (כמו Interactive Access ב-AnyDesk) --
+INTERACTIVE_ALWAYS = "always"          # תמיד לשאול (ברירת מחדל, המצב הקיים)
+INTERACTIVE_WINDOW_OPEN = "window_open"  # לשאול רק כשהחלון פתוח (לא מוסתר למגש)
+INTERACTIVE_NEVER = "never"            # לעולם לא - רק גישה ללא-נוכחות עם סיסמה
+_INTERACTIVE_MODES = (INTERACTIVE_ALWAYS, INTERACTIVE_WINDOW_OPEN, INTERACTIVE_NEVER)
+
+
+def get_interactive_mode(cfg: dict) -> str:
+    m = cfg.get("interactive_mode")
+    return m if m in _INTERACTIVE_MODES else INTERACTIVE_ALWAYS
+
+
+def set_interactive_mode(cfg: dict, mode: str) -> None:
+    if mode not in _INTERACTIVE_MODES:
+        raise ValueError("bad interactive mode")
+    cfg["interactive_mode"] = mode
+    save(cfg)
+
+
+# ---- Wake-on-LAN: כתובת MAC שמורה למזהה מרוחק ספציפי ---------------------
+def get_wol_mac(cfg: dict, host_id: str) -> str | None:
+    return (cfg.get("wol") or {}).get(host_id)
+
+
+def set_wol_mac(cfg: dict, host_id: str, mac: str | None) -> None:
+    w = cfg.setdefault("wol", {})
+    if mac:
+        w[host_id] = mac
+    else:
+        w.pop(host_id, None)
+    save(cfg)

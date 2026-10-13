@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { callApi } from "../bridge";
-import { Button, Card, Checkbox, Field, Input, pushToast } from "../components/ui";
+import { Button, Card, Checkbox, CopyButton, Field, Input, Pill, pushToast } from "../components/ui";
 
 export function SettingsTab({ state, setState }) {
   return (
     <>
       <UnattendedCard state={state} setState={setState} />
+      <TotpCard state={state} setState={setState} />
+      <InteractiveAccessCard state={state} setState={setState} />
+      <AccessControlCard state={state} setState={setState} />
       <ServerCard state={state} setState={setState} />
       <EmbeddedCard state={state} setState={setState} />
     </>
@@ -70,6 +73,133 @@ function UnattendedCard({ state, setState }) {
       <Button variant="primary" className="mt-2" loading={saving} onClick={save}>שמור</Button>
       <p className="card-help">
         מי שיודע את המזהה ואת הסיסמה הקבועה יוכל להתחבר למחשב הזה בלי אישור. השתמשו בסיסמה ארוכה וייחודית, ושתפו אותה רק עם מי שבוטחים בו.
+      </p>
+    </Card>
+  );
+}
+
+function TotpCard({ state, setState }) {
+  const totpEnabled = state.unattended.totpEnabled;
+  const [secret, setSecret] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function enable() {
+    if (!state.unattended.hasKey) {
+      pushToast("אימות דו-שלבי דורש שתהיה מוגדרת סיסמת גישה ללא-נוכחות.", "danger");
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await callApi("setTotp", true);
+      setSecret(r.secret);
+      setState((s) => ({ ...s, unattended: { ...s.unattended, totpEnabled: true } }));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function disable() {
+    setBusy(true);
+    try {
+      await callApi("setTotp", false);
+      setSecret(null);
+      setState((s) => ({ ...s, unattended: { ...s.unattended, totpEnabled: false } }));
+      pushToast("אימות דו-שלבי כבוי.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card title="אימות דו-שלבי (TOTP) לגישה ללא-נוכחות" right={<Pill tone={totpEnabled ? "success" : "muted"}>{totpEnabled ? "מופעל" : "כבוי"}</Pill>}>
+      <p className="card-help">
+        מוסיף קוד בן 6 ספרות שמתחלף כל 30 שניות (כמו Google Authenticator) שחייבים להקליד בנוסף לסיסמה הקבועה.
+        מחייב שתהיה מוגדרת סיסמת גישה ללא-נוכחות.
+      </p>
+      {secret && (
+        <div className="mt-2" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <p className="text-faint">הזינו את המפתח הזה באפליקציית האימות שלכם (מוצג פעם אחת בלבד):</p>
+          <div className="row-between">
+            <span className="ltr id-display" style={{ fontSize: 16 }}>{secret}</span>
+            <CopyButton text={secret} />
+          </div>
+        </div>
+      )}
+      <Button variant={totpEnabled ? "ghost" : "primary"} className="mt-2" loading={busy} onClick={totpEnabled ? disable : enable}>
+        {totpEnabled ? "כבה אימות דו-שלבי" : "הפעל אימות דו-שלבי"}
+      </Button>
+    </Card>
+  );
+}
+
+function InteractiveAccessCard({ state, setState }) {
+  const [mode, setMode] = useState(state.interactiveMode || "always");
+  const [saving, setSaving] = useState(false);
+
+  async function save(next) {
+    setMode(next);
+    setSaving(true);
+    try {
+      await callApi("setInteractiveMode", next);
+      setState((s) => ({ ...s, interactiveMode: next }));
+      pushToast("ההגדרה נשמרה.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card title="מצב בקשת-אישור לחיבור אינטראקטיבי">
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <label className="checkrow">
+          <input type="radio" name="interactive-mode" checked={mode === "always"} disabled={saving} onChange={() => save("always")} />
+          תמיד להציג בקשת אישור
+        </label>
+        <label className="checkrow">
+          <input type="radio" name="interactive-mode" checked={mode === "window_open"} disabled={saving} onChange={() => save("window_open")} />
+          להציג רק כשהחלון פתוח (לא מוסתר למגש)
+        </label>
+        <label className="checkrow">
+          <input type="radio" name="interactive-mode" checked={mode === "never"} disabled={saving} onChange={() => save("never")} />
+          לעולם לא - רק גישה ללא-נוכחות עם סיסמה
+        </label>
+      </div>
+      <p className="card-help">כמו ה-Interactive Access של AnyDesk. לא משפיע על גישה ללא-נוכחות ועל מכשירים מהימנים.</p>
+    </Card>
+  );
+}
+
+function AccessControlCard({ state, setState }) {
+  const [text, setText] = useState((state.ipWhitelist || []).join("\n"));
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    const entries = text.split("\n").map((s) => s.trim()).filter(Boolean);
+    setSaving(true);
+    try {
+      await callApi("setIpWhitelist", entries);
+      setState((s) => ({ ...s, ipWhitelist: entries }));
+      pushToast(entries.length ? "רשימת ה-IP המורשים נשמרה." : "הסרת ההגבלה - כל כתובת IP מורשית.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card title="בקרת גישה: רשימת IP מורשים">
+      <Field label="כתובת IP אחת (או רשת CIDR) בכל שורה - שורה ריקה = בלי הגבלה">
+        <textarea
+          className="input"
+          dir="ltr"
+          rows={4}
+          placeholder={"192.168.1.42\n10.0.0.0/24"}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+      </Field>
+      <Button variant="primary" className="mt-2" loading={saving} onClick={save}>שמור</Button>
+      <p className="card-help">
+        כשמוגדרת רשימה, חיבורים מכתובות שלא ברשימה נדחים לפני כל בקשת אישור - גם אם המזהה והסיסמה נכונים.
       </p>
     </Card>
   );

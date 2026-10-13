@@ -44,9 +44,11 @@ async function mockCall(method, args) {
       id: "123456789",
       online: true,
       recent: ["111222333", "444555666"],
-      unattended: { enabled: false, control: true, clipboard: true, files: true },
+      unattended: { enabled: false, control: true, clipboard: true, files: true, totpEnabled: false },
       server: "ws://127.0.0.1:8765",
       embedded: { enabled: true, port: 8765, lanIp: "192.168.1.50", publicIp: "203.0.113.7", connections: 1 },
+      ipWhitelist: [],
+      interactiveMode: "always",
       session: null,
     }),
     getClipboardText: () => "דוגמה שהודבקה מהלוח",
@@ -54,6 +56,9 @@ async function mockCall(method, args) {
       { peer: "v1a2b3c4d5e6", mode: "interactive", startedAt: Date.now() / 1000 - 600, endedAt: Date.now() / 1000 - 540 },
     ],
     getTrustedDevices: () => [{ peer: "444555666", perms: { control: true, clipboard: true, files: true } }],
+    setTotp: (enabled) => (enabled ? { enabled: true, secret: "JBSWY3DPEHPK3PXP" } : { enabled: false, secret: null }),
+    getWolMac: () => "",
+    getViewerPreset: () => ({ server: "ws://127.0.0.1:8765", recent: ["111222333"] }),
   };
   await new Promise((r) => setTimeout(r, 150));
   return mocks[method] ? mocks[method]() : null;

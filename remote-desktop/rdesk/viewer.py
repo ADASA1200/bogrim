@@ -52,8 +52,9 @@ class ViewerClient:
         self._last_clip: str | None = None
 
     # ------------------------------------------------------------ חיבור
-    async def connect(self, host_id: str, password: str = "", timeout: float = 90) -> None:
-        """password אופציונלי: סיסמת גישה ללא נוכחות. בלעדיה ממתינים לאישור המשתמש."""
+    async def connect(self, host_id: str, password: str = "", totp: str = "", timeout: float = 90) -> None:
+        """password אופציונלי: סיסמת גישה ללא נוכחות. בלעדיה ממתינים לאישור המשתמש.
+        totp: קוד דו-שלבי, רק אם המארח הגדיר שהוא נדרש בנוסף לסיסמה."""
         host_id = P.clean_id(host_id)
         # מזהה קבוע (לא אקראי-חדש-בכל-חיבור) - כדי שמארח יוכל "לזכור" את הצופה
         # הזה בין התחברויות (אמון תמידי למזהה ספציפי).
@@ -98,7 +99,8 @@ class ViewerClient:
             await pc.setLocalDescription(await pc.createOffer())
             sdp = pc.localDescription.sdp
             await send({"kind": "offer", "sdp": sdp,
-                        "auth": P.auth_tag(key, nonce, "viewer", sdp) if key else None})
+                        "auth": P.auth_tag(key, nonce, "viewer", sdp) if key else None,
+                        "totp": totp or None})
             ans = await self._next_payload(ws, timeout)   # ממתין גם לאישור המשתמש
         if ans.get("kind") == "reject":
             await pc.close()

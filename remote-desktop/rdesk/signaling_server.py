@@ -73,8 +73,10 @@ class SignalingServer:
                     if target is None:
                         await ws.send(P.dumps({"type": "unreachable", "to": msg.get("to")}))
                         continue
+                    # from_ip: הכתובת האמיתית של השולח (לא ניתנת לזיוף - זו כתובת
+                    # הסוקט בפועל) - כדי שהצד המקבל יוכל לאכוף רשימת IP מורשים.
                     await target.send(P.dumps({
-                        "type": "relay", "from": my_id, "payload": msg.get("payload"),
+                        "type": "relay", "from": my_id, "from_ip": ip, "payload": msg.get("payload"),
                     }))
         except websockets.ConnectionClosed:
             pass

@@ -74,4 +74,7 @@ async def start(port: int = 8765) -> EmbeddedServer:
     ws_server = await websockets.serve(
         server.handler, "0.0.0.0", port, max_size=P.MAX_SIGNAL_BYTES,
     )
-    return EmbeddedServer(server, ws_server, port, lan_ip())
+    # lan_ip() חוסם סינכרונית (socket.connect עם timeout) - לא רוצים לתקוע את
+    # לולאת ה-asyncio איתו, אז מריצים אותו ב-executor.
+    ip = await asyncio.get_running_loop().run_in_executor(None, lan_ip)
+    return EmbeddedServer(server, ws_server, port, ip)

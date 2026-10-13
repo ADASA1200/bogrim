@@ -17,7 +17,7 @@ from pathlib import Path
 
 import webview
 
-from . import config, connlog, embedded as E, protocol as P
+from . import acl, config, connlog, embedded as E, protocol as P, wol
 from .aio import AsyncRunner
 from .clipboard import Clipboard
 from .host import HostService
@@ -96,12 +96,15 @@ class HostAPI(_WindowPusher):
         self._session_code: str | None = None
         self._started = False
         self.tray = None
+        self._window_visible = True
 
         host_server = f"ws://127.0.0.1:{emb_port}" if emb_on else self.server
         self.service = HostService(
             host_server, self.id, approval=self._approval, on_event=self._on_event,
             unattended_key=key, unattended_perms=uperms, injector=injector, screen=screen,
             trust_check=self._check_trust,
+            ip_whitelist=config.get_ip_whitelist(self.cfg), totp_secret=config.get_totp_secret(self.cfg),
+            interactive_mode=config.get_interactive_mode(self.cfg), window_open_check=lambda: self._window_visible,
         )
 
     def _check_trust(self, peer: str) -> P.Permissions | None:
@@ -150,6 +153,7 @@ class HostAPI(_WindowPusher):
     def _on_window_closing(self):
         if self.tray is not None and self.tray.available:
             self.win.hide()
+            self._window_visible = False
             return False  # מבטל את הסגירה בפועל - נשארים ברקע עם האייקון
         return None
 
@@ -157,6 +161,7 @@ class HostAPI(_WindowPusher):
         if self.win is not None:
             self.win.show()
             self.win.restore()
+            self._window_visible = True
 
     def _tray_disconnect(self) -> None:
         self.disconnect()
@@ -181,6 +186,7 @@ class HostAPI(_WindowPusher):
         elif kind == "session_end":
             self._session_mode = self._session_code = None
             self.push("session_end", {})
+            self.push("privacy_changed", {"enabled": False})
             if self.tray is not None:
                 self.tray.set_connected(False)
             connlog.end_last(kw.get("peer", ""))
@@ -205,6 +211,7 @@ class HostAPI(_WindowPusher):
         if self.win is not None:
             self.win.show()
             self.win.restore()
+            self._window_visible = True
         if self.tray is not None:
             self.tray.set_connected(True, info.get("peer", ""))
         self.push("ask_approval", {"requestId": req_id, "peer": info["peer"]})
@@ -229,7 +236,10 @@ class HostAPI(_WindowPusher):
             "recent": self.cfg.get("recent", []),
             "server": self.server,
             "unattended": {"enabled": key is not None, "hasKey": key is not None,
-                          "control": uperms.control, "clipboard": uperms.clipboard, "files": uperms.files},
+                          "control": uperms.control, "clipboard": uperms.clipboard, "files": uperms.files,
+                          "totpEnabled": config.get_totp_secret(self.cfg) is not None},
+            "ipWhitelist": config.get_ip_whitelist(self.cfg),
+            "interactiveMode": config.get_interactive_mode(self.cfg),
             "embedded": {"enabled": self.embedded_on, "port": self.embedded.port if self.embedded else self.embedded_port,
                         "lanIp": self.embedded.lan_ip if self.embedded else None,
                         "publicIp": self.embedded.public_ip if self.embedded else None},
@@ -255,6 +265,10 @@ class HostAPI(_WindowPusher):
 
     def setPermission(self, key: str, value: bool) -> None:
         self.runner.call(lambda: self.service.set_permissions(**{key: bool(value)}))
+
+    def setPrivacyMode(self, enabled: bool) -> None:
+        self.runner.call(self.service.set_privacy_mode, bool(enabled))
+        self.push("privacy_changed", {"enabled": bool(enabled)})
 
     def sendChat(self, text: str) -> None:
         self.runner.call(self.service.send_chat, text)
@@ -293,6 +307,31 @@ class HostAPI(_WindowPusher):
                               files=bool(opts.get("files", True)), chat=True)
         key = config.set_unattended(self.cfg, password or None, perms)
         self.runner.call(self.service.set_unattended, key, perms)
+
+    def setIpWhitelist(self, entries: list[str]) -> None:
+        self.cfg = config.load()
+        config.set_ip_whitelist(self.cfg, entries or [])
+        self.runner.call(self.service.set_ip_whitelist, config.get_ip_whitelist(self.cfg))
+
+    def setInteractiveMode(self, mode: str) -> None:
+        self.cfg = config.load()
+        config.set_interactive_mode(self.cfg, mode)
+        self.runner.call(self.service.set_interactive_mode, mode)
+
+    def setTotp(self, enabled: bool) -> dict:
+        """enabled=True: מפעיל ומחזיר secret חדש (מוצג פעם אחת להזנה באפליקציית
+        אימות). enabled=False: מכבה. דורש שסיסמת גישה-ללא-נוכחות תהיה מוגדרת."""
+        self.cfg = config.load()
+        if not enabled:
+            config.set_totp_secret(self.cfg, None)
+            self.runner.call(self.service.set_totp_secret, None)
+            return {"enabled": False, "secret": None}
+        if config.get_unattended(self.cfg)[0] is None:
+            raise Exception("need_password")
+        secret = acl.totp_new_secret()
+        config.set_totp_secret(self.cfg, secret)
+        self.runner.call(self.service.set_totp_secret, secret)
+        return {"enabled": True, "secret": secret}
 
     def respondApproval(self, req_id: str, perms: dict | None) -> None:
         fut = self._pending.get(req_id)
@@ -349,17 +388,32 @@ class ViewerAPI(_WindowPusher):
         cfg = config.load()
         return {"server": config.server_url(None), "recent": cfg.get("recent", [])}
 
-    def viewerConnect(self, server: str, host_id: str, password: str):
-        fut = self.runner.submit(self._connect(server, host_id, password))
+    def getWolMac(self, host_id: str) -> str:
+        return config.get_wol_mac(config.load(), P.clean_id(host_id)) or ""
+
+    def setWolMac(self, host_id: str, mac: str) -> None:
+        cfg = config.load()
+        if mac:
+            wol.normalize_mac(mac)   # זורק אם לא תקין - עדיף כישלון ברור מ-UI מאשר שמירה שקטה של MAC שגוי
+        config.set_wol_mac(cfg, P.clean_id(host_id), mac or None)
+
+    def wakeOnLan(self, host_id: str) -> None:
+        mac = config.get_wol_mac(config.load(), P.clean_id(host_id))
+        if not mac:
+            raise Exception("no_mac_saved")
+        wol.send(mac)
+
+    def viewerConnect(self, server: str, host_id: str, password: str, totp: str = ""):
+        fut = self.runner.submit(self._connect(server, host_id, password, totp))
         try:
             return fut.result(95)
         except Exception as e:
             raise Exception(str(e)) from None
 
-    async def _connect(self, server: str, host_id: str, password: str):
+    async def _connect(self, server: str, host_id: str, password: str, totp: str = ""):
         client = ViewerClient(server, on_event=self._on_event)
         self.client = client
-        await client.connect(host_id, password)
+        await client.connect(host_id, password, totp)
         self._pump_task = asyncio.ensure_future(self._frame_pump())
         return {
             "monitors": [m for m in client.monitors],

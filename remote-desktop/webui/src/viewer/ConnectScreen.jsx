@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { callApi } from "../bridge";
-import { Button, Card, Field, Input } from "../components/ui";
+import { Button, Card, Field, Input, pushToast } from "../components/ui";
 
 const REASONS = {
   "bad password": "הסיסמה שגויה",
+  "bad totp": "קוד האימות הדו-שלבי שגוי או לא עדכני",
+  ip_blocked: "המחשב המרוחק חוסם חיבורים מכתובת ה-IP שלך",
+  "interactive disabled": "המחשב המרוחק לא מאפשר חיבור עם בקשת אישור - רק גישה ללא-נוכחות",
+  "window closed": "אפליקציית המארח מוסתרת למגש כרגע ולא יכולה להציג בקשת אישור",
   declined: "המשתמש במחשב המרוחק דחה את החיבור",
   busy: "המחשב המרוחק עסוק בסשן אחר",
   blocked: "נחסמת זמנית עקב ניסיונות רבים. נסו שוב בעוד דקה",
@@ -15,11 +19,14 @@ const REASONS = {
 export function ConnectScreen({ onConnected }) {
   const [id, setId] = useState("");
   const [password, setPassword] = useState("");
+  const [totp, setTotp] = useState("");
   const [server, setServer] = useState("ws://127.0.0.1:8765");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [isError, setIsError] = useState(false);
   const [recent, setRecent] = useState([]);
+  const [wolMac, setWolMac] = useState("");
+  const [waking, setWaking] = useState(false);
 
   useEffect(() => {
     callApi("getViewerPreset").then((p) => {
@@ -34,6 +41,34 @@ export function ConnectScreen({ onConnected }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const cleanId = id.replace(/\D/g, "");
+    if (cleanId.length === 9) callApi("getWolMac", cleanId).then(setWolMac);
+    else setWolMac("");
+  }, [id]);
+
+  async function saveWolMac(mac) {
+    const cleanId = id.replace(/\D/g, "");
+    if (cleanId.length !== 9) return;
+    try {
+      await callApi("setWolMac", cleanId, mac);
+    } catch {
+      pushToast("כתובת MAC לא תקינה (לדוגמה: AA:BB:CC:DD:EE:FF)", "danger");
+    }
+  }
+
+  async function wake() {
+    setWaking(true);
+    try {
+      await callApi("wakeOnLan", id.replace(/\D/g, ""));
+      pushToast("נשלח מגיק-פאקט להעיר את המחשב ברשת המקומית.");
+    } catch (e) {
+      pushToast(String(e?.message || e) === "no_mac_saved" ? "אין כתובת MAC שמורה למזהה הזה" : "שליחה נכשלה", "danger");
+    } finally {
+      setWaking(false);
+    }
+  }
+
   async function connect(presetId, presetPw, presetServer) {
     const useId = (presetId ?? id).replace(/\D/g, "");
     const usePw = presetPw ?? password;
@@ -47,7 +82,7 @@ export function ConnectScreen({ onConnected }) {
     setIsError(false);
     setMsg(usePw ? "מתחבר..." : "ממתין לאישור המשתמש במחשב המרוחק...");
     try {
-      const info = await callApi("viewerConnect", useServer, useId, usePw);
+      const info = await callApi("viewerConnect", useServer, useId, usePw, totp);
       onConnected(info);
     } catch (e) {
       setIsError(true);
@@ -70,6 +105,9 @@ export function ConnectScreen({ onConnected }) {
             <Field label="סיסמה (אופציונלי)">
               <Input type="password" dir="ltr" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && connect()} />
             </Field>
+            <Field label="קוד אימות דו-שלבי (רק אם המארח דורש)">
+              <Input dir="ltr" maxLength={6} placeholder="000000" value={totp} onChange={(e) => setTotp(e.target.value)} onKeyDown={(e) => e.key === "Enter" && connect()} />
+            </Field>
             <p className="card-help">
               בלי סיסמה - המשתמש במחשב המרוחק יתבקש לאשר את החיבור.
               עם סיסמת גישה ללא נוכחות (אם הוגדרה שם) - החיבור יתבצע בלי אישור.
@@ -88,6 +126,17 @@ export function ConnectScreen({ onConnected }) {
                 ))}
               </div>
             )}
+            <details>
+              <summary className="text-faint" style={{ cursor: "pointer" }}>Wake-on-LAN (להעיר מחשב כבוי באותה רשת)</summary>
+              <div className="mt-2" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <Field label="כתובת MAC של המחשב המרוחק">
+                  <Input dir="ltr" placeholder="AA:BB:CC:DD:EE:FF" value={wolMac}
+                    onChange={(e) => setWolMac(e.target.value)}
+                    onBlur={(e) => saveWolMac(e.target.value)} />
+                </Field>
+                <Button variant="ghost" loading={waking} disabled={!wolMac} onClick={wake}>העיר מחשב</Button>
+              </div>
+            </details>
           </div>
         </Card>
       </div>

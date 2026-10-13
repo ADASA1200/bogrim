@@ -125,6 +125,12 @@ function SessionPanel({ state, setState }) {
     await callApi("pickAndSendFile");
   }
 
+  async function togglePrivacy() {
+    const next = !session.privacy;
+    await callApi("setPrivacyMode", next);
+    setState((s) => ({ ...s, session: { ...s.session, privacy: next } }));
+  }
+
   return (
     <>
       {session.mode === "unattended" && <Pill tone="warn">גישה ללא נוכחות (ללא אישור)</Pill>}
@@ -137,8 +143,16 @@ function SessionPanel({ state, setState }) {
       </div>
       <div className="row mt-2">
         <Button variant="ghost" onClick={sendFile}>שלח קובץ</Button>
+        <Button variant={session.privacy ? "primary" : "ghost"} onClick={togglePrivacy}>
+          {session.privacy ? "כבה מצב פרטיות" : "מצב פרטיות"}
+        </Button>
         <Button variant="danger" onClick={disconnect}>נתק</Button>
       </div>
+      {session.privacy && (
+        <p className="text-faint mt-1">
+          המסך הפיזי כאן חסום והקלדה/עכבר מקומיים כבויים - הצופה המרוחק ממשיך לראות ולשלוט כרגיל.
+        </p>
+      )}
       <Chat
         messages={session.chat}
         onSend={async (text) => {

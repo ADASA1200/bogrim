@@ -28,9 +28,12 @@ export default function HostApp() {
     const offs = [
       on("status", (d) => setState((s) => ({ ...s, online: d.online }))),
       on("session_start", (d) =>
-        setState((s) => ({ ...s, session: { peer: d.peer, perms: d.perms, mode: d.mode, code: d.code, chat: [] } }))
+        setState((s) => ({ ...s, session: { peer: d.peer, perms: d.perms, mode: d.mode, code: d.code, chat: [], privacy: false } }))
       ),
       on("session_end", () => setState((s) => ({ ...s, session: null }))),
+      on("privacy_changed", (d) =>
+        setState((s) => (s.session ? { ...s, session: { ...s.session, privacy: d.enabled } } : s))
+      ),
       on("perms_changed", (d) =>
         setState((s) => (s.session ? { ...s, session: { ...s.session, perms: d.perms } } : s))
       ),

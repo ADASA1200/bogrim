@@ -26,3 +26,4 @@ class AsyncRunner:
 
     def stop(self) -> None:
         self.loop.call_soon_threadsafe(self.loop.stop)
+        self.thread.join(timeout=5)   # בלי זה ה-thread יכול להמשיך לרוץ אחרי ש-stop() חזר

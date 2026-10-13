@@ -4,12 +4,12 @@ import asyncio
 
 import pytest
 
-from rdesk import embedded, protocol as P
+from rdesk import acl, embedded, protocol as P
 from rdesk.capture import SyntheticScreen
 from rdesk.clipboard import MemoryClipboard
 from rdesk.host import HostService, make_rtc_config
 from rdesk.inject import NullInjector
-from rdesk.viewer import ViewerClient
+from rdesk.viewer import ConnectError, ViewerClient
 from test_end_to_end import wait_for
 
 
@@ -101,6 +101,140 @@ async def test_trust_check_bypasses_approval(tmp_path):
         assert any(k == "session_start" and kw.get("mode") == "trusted" for k, kw in events)
 
         await v.disconnect()
+        await host.stop()
+        task.cancel()
+    finally:
+        await srv.close()
+
+
+async def test_ip_whitelist_blocks_disallowed_ip(tmp_path):
+    """שני הצדדים כאן מדברים דרך 127.0.0.1 (loopback) - רשימה שלא כוללת אותו
+    צריכה לחסום את החיבור כבר בשלב ה-hello, לפני כל ניסיון אימות."""
+    port = 18905
+    srv = await embedded.start(port)
+    try:
+        host = HostService(
+            f"ws://127.0.0.1:{port}", "222333444", screen=SyntheticScreen(), injector=NullInjector(),
+            clipboard=MemoryClipboard(), approval=lambda info: asyncio.sleep(0, result=P.Permissions()),
+            ip_whitelist=["10.0.0.1"],   # לא כולל 127.0.0.1
+            on_event=lambda k, **kw: None, download_dir=tmp_path / "recv", rtc_config=make_rtc_config([]),
+        )
+        task = asyncio.ensure_future(host.run())
+        await asyncio.wait_for(host.registered.wait(), 5)
+
+        v = ViewerClient(f"ws://127.0.0.1:{port}", clipboard=MemoryClipboard())
+        with pytest.raises(ConnectError, match="ip_blocked"):
+            await v.connect("222333444")
+
+        await host.stop()
+        task.cancel()
+    finally:
+        await srv.close()
+
+
+async def test_ip_whitelist_allows_listed_ip(tmp_path):
+    port = 18906
+    srv = await embedded.start(port)
+    try:
+        host = HostService(
+            f"ws://127.0.0.1:{port}", "222333445", screen=SyntheticScreen(), injector=NullInjector(),
+            clipboard=MemoryClipboard(), approval=lambda info: asyncio.sleep(0, result=P.Permissions()),
+            ip_whitelist=["127.0.0.1"],
+            on_event=lambda k, **kw: None, download_dir=tmp_path / "recv", rtc_config=make_rtc_config([]),
+        )
+        task = asyncio.ensure_future(host.run())
+        await asyncio.wait_for(host.registered.wait(), 5)
+
+        v = ViewerClient(f"ws://127.0.0.1:{port}", clipboard=MemoryClipboard())
+        await v.connect("222333445")
+        assert v.connected
+
+        await v.disconnect()
+        await host.stop()
+        task.cancel()
+    finally:
+        await srv.close()
+
+
+async def test_totp_required_alongside_unattended_password(tmp_path):
+    port = 18907
+    srv = await embedded.start(port)
+    try:
+        secret = acl.totp_new_secret()
+        key = P.derive_key("a-long-enough-password")
+        host = HostService(
+            f"ws://127.0.0.1:{port}", "333444555", screen=SyntheticScreen(), injector=NullInjector(),
+            clipboard=MemoryClipboard(), unattended_key=key, unattended_perms=P.Permissions(),
+            totp_secret=secret,
+            on_event=lambda k, **kw: None, download_dir=tmp_path / "recv", rtc_config=make_rtc_config([]),
+        )
+        task = asyncio.ensure_future(host.run())
+        await asyncio.wait_for(host.registered.wait(), 5)
+
+        # סיסמה נכונה, בלי קוד דו-שלבי - נדחה
+        v1 = ViewerClient(f"ws://127.0.0.1:{port}", clipboard=MemoryClipboard())
+        with pytest.raises(ConnectError, match="bad totp"):
+            await v1.connect("333444555", "a-long-enough-password")
+
+        # סיסמה נכונה + קוד דו-שלבי תקף - מתחבר במצב unattended
+        v2 = ViewerClient(f"ws://127.0.0.1:{port}", clipboard=MemoryClipboard())
+        await v2.connect("333444555", "a-long-enough-password", acl.totp_code(secret))
+        assert v2.connected
+        assert v2.mode == "unattended"
+
+        await v2.disconnect()
+        await host.stop()
+        task.cancel()
+    finally:
+        await srv.close()
+
+
+async def test_interactive_mode_never_rejects_passwordless_connections(tmp_path):
+    port = 18908
+    srv = await embedded.start(port)
+    try:
+        approval_calls = []
+
+        async def approve(info):
+            approval_calls.append(info)
+            return P.Permissions()
+
+        host = HostService(
+            f"ws://127.0.0.1:{port}", "444555666", screen=SyntheticScreen(), injector=NullInjector(),
+            clipboard=MemoryClipboard(), approval=approve, interactive_mode="never",
+            on_event=lambda k, **kw: None, download_dir=tmp_path / "recv", rtc_config=make_rtc_config([]),
+        )
+        task = asyncio.ensure_future(host.run())
+        await asyncio.wait_for(host.registered.wait(), 5)
+
+        v = ViewerClient(f"ws://127.0.0.1:{port}", clipboard=MemoryClipboard())
+        with pytest.raises(ConnectError, match="interactive disabled"):
+            await v.connect("444555666")
+        assert approval_calls == []
+
+        await host.stop()
+        task.cancel()
+    finally:
+        await srv.close()
+
+
+async def test_interactive_mode_window_open_rejects_when_window_hidden(tmp_path):
+    port = 18909
+    srv = await embedded.start(port)
+    try:
+        host = HostService(
+            f"ws://127.0.0.1:{port}", "444555667", screen=SyntheticScreen(), injector=NullInjector(),
+            clipboard=MemoryClipboard(), approval=lambda info: asyncio.sleep(0, result=P.Permissions()),
+            interactive_mode="window_open", window_open_check=lambda: False,
+            on_event=lambda k, **kw: None, download_dir=tmp_path / "recv", rtc_config=make_rtc_config([]),
+        )
+        task = asyncio.ensure_future(host.run())
+        await asyncio.wait_for(host.registered.wait(), 5)
+
+        v = ViewerClient(f"ws://127.0.0.1:{port}", clipboard=MemoryClipboard())
+        with pytest.raises(ConnectError, match="window closed"):
+            await v.connect("444555667")
+
         await host.stop()
         task.cancel()
     finally:
