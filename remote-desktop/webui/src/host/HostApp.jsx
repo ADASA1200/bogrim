@@ -28,9 +28,21 @@ export default function HostApp() {
     const offs = [
       on("status", (d) => setState((s) => ({ ...s, online: d.online }))),
       on("session_start", (d) =>
-        setState((s) => ({ ...s, session: { peer: d.peer, perms: d.perms, mode: d.mode, code: d.code, chat: [], privacy: false } }))
+        setState((s) => ({
+          ...s,
+          session: { peer: d.peer, perms: d.perms, mode: d.mode, code: d.code, chat: [], privacy: false, whiteboard: [] },
+        }))
       ),
       on("session_end", () => setState((s) => ({ ...s, session: null }))),
+      on("whiteboard", (d) =>
+        setState((s) => {
+          if (!s.session) return s;
+          const data = d?.data;
+          if (!data) return s;
+          const whiteboard = data.type === "clear" ? [] : [...s.session.whiteboard, data];
+          return { ...s, session: { ...s.session, whiteboard } };
+        })
+      ),
       on("privacy_changed", (d) =>
         setState((s) => (s.session ? { ...s, session: { ...s.session, privacy: d.enabled } } : s))
       ),

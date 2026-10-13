@@ -130,6 +130,13 @@ async def test_full_connect_approve_video_chat_disconnect(host_api, host_events,
     host_api.sendChat("שלום מהמארח")
     assert await wait_for(lambda: any(k == "chat" and d["text"] == "שלום מהמארח" for k, d in viewer_events))
 
+    # Whiteboard (שיתוף סקיצות) - גם זה דו-כיווני, על אותו control channel
+    stroke = {"type": "stroke", "points": [[0.1, 0.1], [0.2, 0.2]], "color": "#fff", "width": 3}
+    viewer_api.sendWhiteboard(stroke)
+    assert await wait_for(lambda: any(k == "whiteboard" and d["data"] == stroke for k, d in host_events))
+    host_api.sendWhiteboard({"type": "clear"})
+    assert await wait_for(lambda: any(k == "whiteboard" and d["data"] == {"type": "clear"} for k, d in viewer_events))
+
     # הרשאות
     host_api.setPermission("files", False)
     assert await wait_for(lambda: any(k == "perms_changed" and not d["perms"]["files"] for k, d in viewer_events))
@@ -379,3 +386,61 @@ def test_parse_invite_link_via_viewer_api(runner):
     url = P.make_invite_url("135791357", "tok", "ws://127.0.0.1:8765")
     assert viewer.parseInviteLink(url) == {"id": "135791357", "token": "tok", "server": "ws://127.0.0.1:8765"}
     assert viewer.parseInviteLink("not a link") is None
+
+
+def test_start_tunnel_without_connection_raises(runner):
+    viewer = webapp.ViewerAPI(runner, None)
+    with pytest.raises(Exception, match="not_connected"):
+        viewer.startTunnel(12345, "127.0.0.1", 80)
+
+
+async def test_start_tunnel_via_viewer_api_relays_real_bytes(host_api, host_events, runner):
+    import asyncio as _asyncio
+
+    await wait_online(host_api)
+    port = host_api.embedded_port
+
+    echo_port = free_port()
+
+    async def handle_echo(reader, writer):
+        try:
+            while True:
+                chunk = await reader.read(4096)
+                if not chunk:
+                    break
+                writer.write(chunk)
+                await writer.drain()
+        except Exception:
+            pass
+        finally:
+            writer.close()
+
+    echo_srv = await _asyncio.start_server(handle_echo, "127.0.0.1", echo_port)
+    local_port = free_port()
+    try:
+        viewer_api = webapp.ViewerAPI(runner, None)
+        viewer_api.push = recorder([])
+
+        async def do_connect():
+            return await viewer_api._connect(f"ws://127.0.0.1:{port}", "135791357", "")
+
+        fut = runner.submit(do_connect())
+        assert await wait_for(lambda: any(k == "ask_approval" for k, _ in host_events), 10)
+        req = next(d for k, d in host_events if k == "ask_approval")
+        host_api.respondApproval(req["requestId"], {"control": True, "clipboard": True, "files": True, "chat": True})
+        await _asyncio.wrap_future(fut)
+
+        viewer_api.startTunnel(local_port, "127.0.0.1", echo_port)
+        reader, writer = await _asyncio.open_connection("127.0.0.1", local_port)
+        writer.write(b"via webapp bridge")
+        await writer.drain()
+        data = await _asyncio.wait_for(reader.read(100), 5)
+        assert data == b"via webapp bridge"
+        writer.close()
+
+        viewer_api.stopTunnel(local_port)
+        viewer_api.viewerDisconnect()
+        assert await wait_for(lambda: any(k == "session_end" for k, _ in host_events))
+    finally:
+        echo_srv.close()
+        await echo_srv.wait_closed()

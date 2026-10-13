@@ -210,6 +210,8 @@ class HostAPI(_WindowPusher):
             connlog.end_last(kw.get("peer", ""))
         elif kind == "chat":
             self.push("chat", {"text": kw["text"]})
+        elif kind == "whiteboard":
+            self.push("whiteboard", {"data": kw.get("data")})
         elif kind == "alert":
             self.push("alert", {"reason": kw.get("reason")})
         elif kind in ("file_received", "file_sent", "file_error"):
@@ -290,6 +292,9 @@ class HostAPI(_WindowPusher):
 
     def sendChat(self, text: str) -> None:
         self.runner.call(self.service.send_chat, text)
+
+    def sendWhiteboard(self, data: dict) -> None:
+        self.runner.call(self.service.send_whiteboard, data)
 
     def pickAndSendFile(self):
         win = self.win
@@ -459,6 +464,8 @@ class ViewerAPI(_WindowPusher):
     def _on_event(self, kind: str, **kw) -> None:
         if kind == "chat":
             self.push("chat", {"text": kw["text"]})
+        elif kind == "whiteboard":
+            self.push("whiteboard", {"data": kw.get("data")})
         elif kind == "perms":
             self.push("perms_changed", {"perms": kw["perms"]})
         elif kind == "closed":
@@ -482,11 +489,28 @@ class ViewerAPI(_WindowPusher):
         if self.client:
             self.runner.call(self.client.send_chat, text)
 
+    def sendWhiteboard(self, data: dict) -> None:
+        if self.client:
+            self.runner.call(self.client.send_whiteboard, data)
+
     def pickAndSendFile(self):
         win = self.win
         result = win.create_file_dialog(webview.OPEN_DIALOG) if win else None
         if result and self.client:
             self.runner.submit(self.client.send_file(result[0]))
+
+    def startTunnel(self, local_port: int, remote_host: str, remote_port: int):
+        if not self.client:
+            raise Exception("not_connected")
+        fut = self.runner.submit(self.client.start_tunnel(int(local_port), remote_host, int(remote_port)))
+        try:
+            fut.result(10)
+        except Exception as e:
+            raise Exception(str(e)) from None
+
+    def stopTunnel(self, local_port: int) -> None:
+        if self.client:
+            self.runner.submit(self.client.stop_tunnel(int(local_port)))
 
     def viewerDisconnect(self) -> None:
         if self.client:

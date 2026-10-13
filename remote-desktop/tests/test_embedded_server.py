@@ -10,7 +10,7 @@ from rdesk.clipboard import MemoryClipboard
 from rdesk.host import HostService, make_rtc_config
 from rdesk.inject import NullInjector
 from rdesk.viewer import ConnectError, ViewerClient
-from test_end_to_end import wait_for
+from test_end_to_end import free_port, wait_for
 
 
 def test_lan_ip_is_plausible_or_none():
@@ -317,3 +317,55 @@ async def test_two_embedded_hosts_different_ports_are_independent(tmp_path):
     finally:
         await srv_a.close()
         await srv_b.close()
+
+
+async def test_tcp_tunnel_over_real_webrtc_data_channel(tmp_path):
+    """לא היה-יצדדי (unit) כמו test_tunnel.py - כאן זה דרך handshake WebRTC
+    אמיתי בין HostService ל-ViewerClient, בדיוק כמו בפרודקשן."""
+    port = 18911
+    srv = await embedded.start(port)
+    echo_port = free_port()
+
+    async def handle_echo(reader, writer):
+        try:
+            while True:
+                chunk = await reader.read(4096)
+                if not chunk:
+                    break
+                writer.write(chunk)
+                await writer.drain()
+        except Exception:
+            pass
+        finally:
+            writer.close()
+
+    echo_srv = await asyncio.start_server(handle_echo, "127.0.0.1", echo_port)
+    local_port = free_port()
+    try:
+        host = HostService(
+            f"ws://127.0.0.1:{port}", "777888999", screen=SyntheticScreen(), injector=NullInjector(),
+            clipboard=MemoryClipboard(), approval=lambda info: asyncio.sleep(0, result=P.Permissions()),
+            on_event=lambda k, **kw: None, download_dir=tmp_path / "recv", rtc_config=make_rtc_config([]),
+        )
+        task = asyncio.ensure_future(host.run())
+        await asyncio.wait_for(host.registered.wait(), 5)
+
+        v = ViewerClient(f"ws://127.0.0.1:{port}", clipboard=MemoryClipboard())
+        await v.connect("777888999")
+        assert v.connected
+
+        await v.start_tunnel(local_port, "127.0.0.1", echo_port)
+        reader, writer = await asyncio.open_connection("127.0.0.1", local_port)
+        writer.write(b"tunneled over real webrtc")
+        await writer.drain()
+        data = await asyncio.wait_for(reader.read(100), 5)
+        assert data == b"tunneled over real webrtc"
+        writer.close()
+
+        await v.disconnect()
+        await host.stop()
+        task.cancel()
+    finally:
+        echo_srv.close()
+        await echo_srv.wait_closed()
+        await srv.close()

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { callApi, on } from "../bridge";
-import { Button, Checkbox, pushToast } from "../components/ui";
+import { Button, Checkbox, Field, Input, pushToast } from "../components/ui";
 import { Chat } from "../host/Chat";
 import { RemoteScreen } from "./RemoteScreen";
 
@@ -11,7 +11,34 @@ export function SessionScreen({ info, onClosed }) {
   const [quality, setQuality] = useState("high");
   const [chatOpen, setChatOpen] = useState(false);
   const [chat, setChat] = useState([]);
+  const [tunnelOpen, setTunnelOpen] = useState(false);
+  const [tunnels, setTunnels] = useState([]);
+  const [newLocalPort, setNewLocalPort] = useState("");
+  const [newRemoteHost, setNewRemoteHost] = useState("127.0.0.1");
+  const [newRemotePort, setNewRemotePort] = useState("");
   const rootRef = useRef(null);
+
+  async function addTunnel() {
+    const localPort = parseInt(newLocalPort, 10);
+    const remotePort = parseInt(newRemotePort, 10);
+    if (!Number.isInteger(localPort) || !Number.isInteger(remotePort)) {
+      pushToast("פורט לא תקין.", "danger");
+      return;
+    }
+    try {
+      await callApi("startTunnel", localPort, newRemoteHost, remotePort);
+      setTunnels((t) => [...t, { localPort, remoteHost: newRemoteHost, remotePort }]);
+      setNewLocalPort("");
+      setNewRemotePort("");
+    } catch (e) {
+      pushToast("פתיחת המעבר נכשלה: " + String(e?.message || e), "danger");
+    }
+  }
+
+  async function removeTunnel(localPort) {
+    await callApi("stopTunnel", localPort);
+    setTunnels((t) => t.filter((x) => x.localPort !== localPort));
+  }
 
   useEffect(() => {
     const offs = [
@@ -73,6 +100,9 @@ export function SessionScreen({ info, onClosed }) {
         </select>
         <Button variant="ghost" size="sm" onClick={() => callApi("pickAndSendFile")} disabled={!perms.files}>שלח קובץ</Button>
         <Button variant="ghost" size="sm" onClick={() => setChatOpen((v) => !v)}>צ'אט</Button>
+        <Button variant="ghost" size="sm" disabled={!perms.control} onClick={() => setTunnelOpen((v) => !v)}>
+          מעבר פורט (TCP)
+        </Button>
         <Button variant="ghost" size="sm" onClick={toggleFullscreen}>מסך מלא</Button>
         <Button variant="danger" size="sm" onClick={disconnect}>נתק</Button>
       </div>
@@ -88,6 +118,34 @@ export function SessionScreen({ info, onClosed }) {
                 setChat((c) => [...c, { from: "me", text }]);
               }}
             />
+          </div>
+        )}
+        {tunnelOpen && (
+          <div style={{ width: 280, borderInlineStart: "1px solid var(--border-soft)", background: "var(--bg-elev-1)", padding: 14, display: "flex", flexDirection: "column", gap: 10, overflowY: "auto" }}>
+            <strong>מעבר פורט (TCP Tunneling)</strong>
+            <p className="card-help">
+              פותח פורט מקומי שמחבר, דרך הסשן המוצפן, לשירות TCP בצד המחשב המרוחק (RDP/SSH פנימי וכו').
+            </p>
+            <Field label="פורט מקומי">
+              <Input dir="ltr" value={newLocalPort} onChange={(e) => setNewLocalPort(e.target.value)} />
+            </Field>
+            <Field label="כתובת היעד במחשב המרוחק">
+              <Input dir="ltr" value={newRemoteHost} onChange={(e) => setNewRemoteHost(e.target.value)} />
+            </Field>
+            <Field label="פורט יעד">
+              <Input dir="ltr" value={newRemotePort} onChange={(e) => setNewRemotePort(e.target.value)} />
+            </Field>
+            <Button variant="primary" size="sm" onClick={addTunnel}>פתח מעבר</Button>
+            {tunnels.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {tunnels.map((t) => (
+                  <div key={t.localPort} className="row-between">
+                    <span className="text-sm ltr">127.0.0.1:{t.localPort} → {t.remoteHost}:{t.remotePort}</span>
+                    <Button variant="ghost" size="sm" onClick={() => removeTunnel(t.localPort)}>סגור</Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

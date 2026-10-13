@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { callApi, on } from "../bridge";
+import { Whiteboard } from "../components/Whiteboard";
 import { keyName, shouldPreventDefault } from "./keymap";
 
 const BUTTONS = { 0: "left", 1: "middle", 2: "right" };
@@ -12,6 +13,8 @@ export function RemoteScreen({ viewOnly, sessionId }) {
   const [fps, setFps] = useState(0);
   const frameCountRef = useRef(0);
   const fpsClockRef = useRef(performance.now());
+  const [drawing, setDrawing] = useState(false);
+  const [strokes, setStrokes] = useState([]);
 
   useEffect(() => {
     const off = on("frame", (b64) => {
@@ -28,6 +31,26 @@ export function RemoteScreen({ viewOnly, sessionId }) {
     });
     return off;
   }, []);
+
+  useEffect(() => {
+    const off = on("whiteboard", (d) => {
+      const data = d?.data;
+      if (!data) return;
+      if (data.type === "clear") setStrokes([]);
+      else setStrokes((s) => [...s, data]);
+    });
+    return off;
+  }, []);
+
+  function onStroke(stroke) {
+    setStrokes((s) => [...s, stroke]);
+    callApi("sendWhiteboard", stroke);
+  }
+
+  function clearWhiteboard() {
+    setStrokes([]);
+    callApi("sendWhiteboard", { type: "clear" });
+  }
 
   function onImgLoad() {
     const img = imgRef.current;
@@ -123,6 +146,14 @@ export function RemoteScreen({ viewOnly, sessionId }) {
         draggable={false}
         style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", userSelect: "none", pointerEvents: "none" }}
       />
+      {(() => {
+        const r = contentRect();
+        return (
+          <div style={{ position: "absolute", left: r.x, top: r.y, width: r.w, height: r.h }}>
+            <Whiteboard active={drawing} strokes={strokes} onStroke={onStroke} />
+          </div>
+        );
+      })()}
       <div
         className="ltr"
         style={{
@@ -134,9 +165,28 @@ export function RemoteScreen({ viewOnly, sessionId }) {
           fontSize: 11,
           padding: "3px 8px",
           borderRadius: 6,
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
         }}
       >
-        {size.w}x{size.h} · {fps} FPS
+        <span>{size.w}x{size.h} · {fps} FPS</span>
+        {!viewOnly && (
+          <>
+            <button
+              className={`btn btn-sm ${drawing ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setDrawing((d) => !d)}
+              style={{ padding: "2px 8px" }}
+            >
+              {drawing ? "מצב שליטה" : "שיתוף סקיצות"}
+            </button>
+            {drawing && (
+              <button className="btn btn-ghost btn-sm" onClick={clearWhiteboard} style={{ padding: "2px 8px" }}>
+                נקה
+              </button>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

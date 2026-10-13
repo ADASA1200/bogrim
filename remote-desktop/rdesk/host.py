@@ -14,6 +14,7 @@ from aiortc import RTCConfiguration, RTCIceServer, RTCPeerConnection, RTCSession
 
 from . import acl, protocol as P
 from .privacy import PrivacyGuard
+from .tunnel import TunnelHost
 from .capture import MssScreen, ScreenTrack
 from .clipboard import Clipboard
 from .files import FileTransfer
@@ -44,6 +45,7 @@ class Session:
         self.perms = perms
         self.control = None
         self.files: FileTransfer | None = None
+        self.tunnel: "TunnelHost | None" = None
         self.tasks: list[asyncio.Task] = []
         self.started = time.time()
         self.closed = False
@@ -290,6 +292,15 @@ class HostService:
                 sess.files = FileTransfer(
                     ch, self.download_dir, enabled=lambda: sess.perms.files,
                     on_event=lambda kind, **kw: self.on_event("file_" + kind, **kw))
+            elif ch.label == "tunnel":
+                # TCP Tunneling (כמו AnyDesk): דורש הרשאת שליטה מלאה, כי זה
+                # שווה-ערך ליצירת חיבורים יוצאים חדשים ברשת של המארח.
+                def send_if_open(data):
+                    if ch.readyState == "open":
+                        ch.send(data)
+                tun = TunnelHost(send_text=send_if_open, send_binary=send_if_open)
+                sess.tunnel = tun
+                ch.on("message", lambda m: tun.handle_message(m) if sess.perms.control else None)
 
         @pc.on("connectionstatechange")
         async def on_state():
@@ -353,6 +364,8 @@ class HostService:
             if len(text.encode()) <= P.MAX_CLIPBOARD_BYTES:
                 sess._last_clip = text
                 self.clipboard.set(text)
+        elif t == "wb":
+            self.on_event("whiteboard", peer=sess.peer, data=m.get("data"))
         elif t == "bye":
             asyncio.ensure_future(self._end_session(sess))
 
@@ -392,6 +405,10 @@ class HostService:
         if self.session:
             self._ctl_send(self.session, {"t": "chat", "text": text[:2000]})
 
+    def send_whiteboard(self, data: dict) -> None:
+        if self.session:
+            self._ctl_send(self.session, {"t": "wb", "data": data})
+
     def set_permissions(self, **kw) -> None:
         """שינוי הרשאות תוך כדי סשן (למשל ביטול שליטה)."""
         if not self.session:
@@ -401,6 +418,8 @@ class HostService:
                 setattr(self.session.perms, k, bool(v))
         if not self.session.perms.control:
             self.injector.release_all()
+            if self.session.tunnel is not None:
+                self.session.tunnel.close_all()
         self._ctl_send(self.session, {"t": "perms", "perms": self.session.perms.to_json()})
 
     async def send_file(self, path: str) -> None:
@@ -421,6 +440,8 @@ class HostService:
             t.cancel()
         if sess.files:
             sess.files.close()
+        if sess.tunnel:
+            sess.tunnel.close_all()
         try:
             self.injector.release_all()
         except Exception:

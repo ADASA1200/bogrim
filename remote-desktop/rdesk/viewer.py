@@ -14,6 +14,7 @@ from . import config, protocol as P
 from .clipboard import Clipboard
 from .files import FileTransfer
 from .host import make_rtc_config
+from .tunnel import TunnelViewer
 
 log = logging.getLogger("rdesk.viewer")
 
@@ -39,6 +40,8 @@ class ViewerClient:
         self.pc: RTCPeerConnection | None = None
         self.control = None
         self.files: FileTransfer | None = None
+        self.tunnel: TunnelViewer | None = None
+        self._tunnel_ch = None
         self.latest_frame = None       # numpy RGB אחרון
         self.frame_seq = 0
         self.monitors: list[dict] = []
@@ -87,6 +90,15 @@ class ViewerClient:
                 files_ch, self.download_dir, enabled=lambda: self.perms.files,
                 on_event=lambda kind, **kw: self.on_event("file_" + kind, **kw))
             self.control.on("message", self._on_control)
+
+            tunnel_ch = pc.createDataChannel("tunnel")
+            self._tunnel_ch = tunnel_ch
+
+            def send_if_open(data):
+                if tunnel_ch.readyState == "open":
+                    tunnel_ch.send(data)
+            self.tunnel = TunnelViewer(send_text=send_if_open, send_binary=send_if_open)
+            tunnel_ch.on("message", lambda m: self.tunnel.handle_message(m))
 
             @pc.on("track")
             def on_track(track):
@@ -184,6 +196,8 @@ class ViewerClient:
             if len(text.encode()) <= P.MAX_CLIPBOARD_BYTES:
                 self._last_clip = text
                 self.clipboard.set(text)
+        elif t == "wb":
+            self.on_event("whiteboard", data=m.get("data"))
         elif t == "bye":
             asyncio.ensure_future(self._closed("host ended the session"))
 
@@ -220,9 +234,20 @@ class ViewerClient:
     def send_chat(self, text: str) -> None:
         self._send({"t": "chat", "text": text[:2000]})
 
+    def send_whiteboard(self, data: dict) -> None:
+        self._send({"t": "wb", "data": data})
+
     async def send_file(self, path: str) -> None:
         if self.files and self.perms.files:
             await self.files.send_file(path)
+
+    async def start_tunnel(self, local_port: int, remote_host: str, remote_port: int) -> None:
+        if self.perms.control and self.tunnel:
+            await self.tunnel.start_forward(local_port, remote_host, remote_port)
+
+    async def stop_tunnel(self, local_port: int) -> None:
+        if self.tunnel:
+            await self.tunnel.stop_forward(local_port)
 
     # ------------------------------------------------------------ סיום
     async def disconnect(self) -> None:
@@ -240,6 +265,8 @@ class ViewerClient:
         self._tasks.clear()
         if self.files:
             self.files.close()
+        if self.tunnel:
+            await self.tunnel.close_all()
         pc, self.pc = self.pc, None
         if pc:
             await pc.close()

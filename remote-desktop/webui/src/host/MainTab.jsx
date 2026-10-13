@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { callApi } from "../bridge";
 import { Button, Card, Checkbox, CopyButton, Field, Input, Pill, pushToast } from "../components/ui";
+import { Whiteboard } from "../components/Whiteboard";
 import { Chat } from "./Chat";
 import { reasonText } from "./HostApp";
 
@@ -140,6 +141,17 @@ export function MainTab({ state, setState }) {
 
 function SessionPanel({ state, setState }) {
   const { session } = state;
+  const [drawing, setDrawing] = useState(false);
+
+  function onStroke(stroke) {
+    setState((s) => ({ ...s, session: { ...s.session, whiteboard: [...s.session.whiteboard, stroke] } }));
+    callApi("sendWhiteboard", stroke);
+  }
+
+  function clearWhiteboard() {
+    setState((s) => ({ ...s, session: { ...s.session, whiteboard: [] } }));
+    callApi("sendWhiteboard", { type: "clear" });
+  }
 
   async function togglePerm(key, value) {
     await callApi("setPermission", key, value);
@@ -176,12 +188,23 @@ function SessionPanel({ state, setState }) {
         <Button variant={session.privacy ? "primary" : "ghost"} onClick={togglePrivacy}>
           {session.privacy ? "כבה מצב פרטיות" : "מצב פרטיות"}
         </Button>
+        <Button variant={drawing ? "primary" : "ghost"} onClick={() => setDrawing((d) => !d)}>
+          {drawing ? "סגור שיתוף סקיצות" : "שיתוף סקיצות"}
+        </Button>
         <Button variant="danger" onClick={disconnect}>נתק</Button>
       </div>
       {session.privacy && (
         <p className="text-faint mt-1">
           המסך הפיזי כאן חסום והקלדה/עכבר מקומיים כבויים - הצופה המרוחק ממשיך לראות ולשלוט כרגיל.
         </p>
+      )}
+      {drawing && (
+        <div className="mt-2" style={{ position: "relative", height: 220, background: "#111", borderRadius: 8, overflow: "hidden" }}>
+          <Whiteboard active={drawing} strokes={session.whiteboard} onStroke={onStroke} color="#38bdf8" />
+          <Button variant="ghost" size="sm" onClick={clearWhiteboard} style={{ position: "absolute", top: 6, insetInlineEnd: 6 }}>
+            נקה
+          </Button>
+        </div>
       )}
       <Chat
         messages={session.chat}
