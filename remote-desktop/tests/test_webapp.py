@@ -506,3 +506,62 @@ async def test_login_account_wrong_password_raises(tmp_path, runner, monkeypatch
             api.loginAccount("alice", "wrong-password")
     finally:
         await _stop_signaling_on_runner(runner, ws_server)
+
+
+def test_viewer_auto_prints_file_named_as_print_job(runner, monkeypatch):
+    printed = []
+    monkeypatch.setattr(webapp.printing, "print_received_file", lambda path: printed.append(path) or True)
+
+    viewer = webapp.ViewerAPI(runner, None)
+    events = []
+    viewer.push = recorder(events)
+
+    viewer._on_event("file_received", name="rdesk-print-report.pdf", path="/tmp/rdesk-print-report.pdf")
+    assert printed == ["/tmp/rdesk-print-report.pdf"]
+    assert events == [("file_event", {"kind": "printed", "path": "/tmp/rdesk-print-report.pdf"})]
+
+
+def test_viewer_does_not_auto_print_ordinary_files(runner, monkeypatch):
+    printed = []
+    monkeypatch.setattr(webapp.printing, "print_received_file", lambda path: printed.append(path) or True)
+
+    viewer = webapp.ViewerAPI(runner, None)
+    events = []
+    viewer.push = recorder(events)
+
+    viewer._on_event("file_received", name="vacation.jpg", path="/tmp/vacation.jpg")
+    assert printed == []
+    assert events == [("file_event", {"kind": "received", "path": "/tmp/vacation.jpg"})]
+
+
+async def test_host_forwards_new_print_file_to_connected_viewer(host_api, host_events, runner, tmp_path, monkeypatch):
+    printed = []
+    monkeypatch.setattr(webapp.printing, "print_received_file", lambda path: printed.append(path) or True)
+
+    await wait_online(host_api)
+    port = host_api.embedded_port
+
+    viewer_api = webapp.ViewerAPI(runner, None)
+    viewer_events = []
+    viewer_api.push = recorder(viewer_events)
+
+    async def do_connect():
+        return await viewer_api._connect(f"ws://127.0.0.1:{port}", "135791357", "")
+
+    fut = runner.submit(do_connect())
+    assert await wait_for(lambda: any(k == "ask_approval" for k, _ in host_events), 10)
+    req = next(d for k, d in host_events if k == "ask_approval")
+    host_api.respondApproval(req["requestId"], {"control": True, "clipboard": True, "files": True, "chat": True})
+    await asyncio.wrap_future(fut)
+
+    fake_pdf = tmp_path / "out.pdf"
+    fake_pdf.write_bytes(b"%PDF-1.4 fake printable content")
+    await asyncio.wrap_future(runner.submit(host_api._on_print_file(fake_pdf)))
+
+    assert await wait_for(lambda: any(k == "file_event" and d["kind"] == "printed" for k, d in viewer_events), 10)
+    assert len(printed) == 1
+    assert "rdesk-print-out" in printed[0] and printed[0].endswith(".pdf")
+    assert not fake_pdf.exists()   # נמחק/נדחף - בכל מקרה לא נשאר במקום המקורי
+
+    viewer_api.viewerDisconnect()
+    assert await wait_for(lambda: any(k == "session_end" for k, _ in host_events))

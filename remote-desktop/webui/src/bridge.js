@@ -63,6 +63,7 @@ async function mockCall(method, args) {
     parseInviteLink: (url) => (url?.startsWith("rdesk://") ? { id: "123456789", token: "demo-token", server: "ws://127.0.0.1:8765" } : null),
     getAccountState: () => ({ loggedIn: false, username: null }),
     getAddressBook: () => [],
+    getPrintingState: () => ({ supported: true, enabled: false }),
   };
   await new Promise((r) => setTimeout(r, 150));
   return mocks[method] ? mocks[method]() : null;

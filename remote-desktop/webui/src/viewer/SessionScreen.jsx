@@ -52,8 +52,13 @@ export function SessionScreen({ info, onClosed }) {
         onClosed();
       }),
       on("file_event", (d) => {
-        const map = { received: `התקבל קובץ: ${d.path}`, error: `שגיאת קובץ: ${d.reason}` };
-        if (map[d.kind]) pushToast(map[d.kind], d.kind === "error" ? "danger" : "default");
+        const map = {
+          received: `התקבל קובץ: ${d.path}`,
+          error: `שגיאת קובץ: ${d.reason}`,
+          printed: "נשלחה הדפסה מהמחשב המרוחק למדפסת כאן.",
+          print_failed: "התקבלה הדפסה מהמחשב המרוחק אך השליחה למדפסת נכשלה.",
+        };
+        if (map[d.kind]) pushToast(map[d.kind], d.kind === "error" || d.kind === "print_failed" ? "danger" : "default");
       }),
     ];
     return () => offs.forEach((f) => f());

@@ -18,7 +18,7 @@ from pathlib import Path
 
 import webview
 
-from . import account_client, acl, config, connlog, embedded as E, protocol as P, wol
+from . import account_client, acl, config, connlog, embedded as E, printing, protocol as P, wol
 from .aio import AsyncRunner
 from .clipboard import Clipboard
 from .host import HostService
@@ -99,6 +99,8 @@ class HostAPI(_WindowPusher):
         self.tray = None
         self._window_visible = True
         self._invites: dict[str, tuple[P.Permissions, float]] = {}
+        self._printer_port = printing.PrinterPort(config.CONFIG_DIR / "print_out")
+        self._printer_task = None
 
         host_server = f"ws://127.0.0.1:{emb_port}" if emb_on else self.server
         self.service = HostService(
@@ -118,6 +120,40 @@ class HostAPI(_WindowPusher):
             return None
         perms, expires_at = entry
         return perms if time.time() <= expires_at else None
+
+    # ------------------------------------------------------------- הדפסה מרחוק
+    def getPrintingState(self) -> dict:
+        return {"supported": self._printer_port.supported, "enabled": self._printer_task is not None}
+
+    def enableRemotePrinting(self) -> dict:
+        if not self._printer_port.supported:
+            raise Exception("not_supported")
+        if self._printer_task is None:
+            if not self._printer_port.install():
+                raise Exception("install_failed_needs_admin")
+            self._printer_task = self.runner.submit(self._printer_port.watch(self._on_print_file))
+        return {"enabled": True}
+
+    def disableRemotePrinting(self) -> None:
+        if self._printer_task is not None:
+            self._printer_task.cancel()
+            self._printer_task = None
+        self._printer_port.uninstall()
+
+    async def _on_print_file(self, path) -> None:
+        """קובץ PDF חדש הופיע בתיקיית הפלט של המדפסת הווירטואלית - שולחים
+        אותו לצופה המחובר (אם יש) דרך ערוץ הקבצים הקיים, עם שם שמסמן
+        לצד השני להדפיס אותו מיד במקום רק לשמור (ראו printing.py)."""
+        sess = self.service.session
+        if sess is None or sess.files is None or not sess.perms.files:
+            path.unlink(missing_ok=True)
+            return
+        target = path.with_name(printing.PRINT_NAME_PREFIX + path.name)
+        path.rename(target)
+        try:
+            await sess.files.send_file(str(target))
+        finally:
+            target.unlink(missing_ok=True)
 
     def createInviteLink(self, minutes: int = 10) -> dict:
         now = time.time()
@@ -517,8 +553,15 @@ class ViewerAPI(_WindowPusher):
             self.push("perms_changed", {"perms": kw["perms"]})
         elif kind == "closed":
             self.push("closed", {"reason": kw.get("reason")})
-        elif kind in ("file_received", "file_error"):
-            self.push("file_event", {"kind": kind.replace("file_", ""), "path": kw.get("path", ""), "reason": kw.get("reason", "")})
+        elif kind == "file_received":
+            name, path = kw.get("name", ""), kw.get("path", "")
+            if printing.is_print_job(name):
+                printed = printing.print_received_file(path)
+                self.push("file_event", {"kind": "printed" if printed else "print_failed", "path": path})
+            else:
+                self.push("file_event", {"kind": "received", "path": path})
+        elif kind == "file_error":
+            self.push("file_event", {"kind": "error", "path": kw.get("path", ""), "reason": kw.get("reason", "")})
 
     def sendInput(self, ev: dict) -> None:
         if self.client:

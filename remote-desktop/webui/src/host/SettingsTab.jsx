@@ -6,6 +6,7 @@ export function SettingsTab({ state, setState }) {
   return (
     <>
       <AccountCard />
+      <RemotePrintingCard />
       <UnattendedCard state={state} setState={setState} />
       <TotpCard state={state} setState={setState} />
       <InteractiveAccessCard state={state} setState={setState} />
@@ -13,6 +14,57 @@ export function SettingsTab({ state, setState }) {
       <ServerCard state={state} setState={setState} />
       <EmbeddedCard state={state} setState={setState} />
     </>
+  );
+}
+
+function RemotePrintingCard() {
+  const [state, setStateP] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    callApi("getPrintingState").then(setStateP);
+  }, []);
+
+  async function toggle() {
+    setBusy(true);
+    try {
+      if (state.enabled) {
+        await callApi("disableRemotePrinting");
+        setStateP((s) => ({ ...s, enabled: false }));
+        pushToast("הדפסה מרחוק כבויה.");
+      } else {
+        await callApi("enableRemotePrinting");
+        setStateP((s) => ({ ...s, enabled: true }));
+        pushToast("הדפסה מרחוק פעילה.");
+      }
+    } catch (e) {
+      const code = String(e?.message || e);
+      const msg = code === "install_failed_needs_admin"
+        ? "ההפעלה נכשלה - ייתכן שצריך להריץ את RDesk כמנהל פעם אחת."
+        : code === "not_supported" ? "התכונה נתמכת כרגע רק ב-Windows." : "ההפעלה נכשלה.";
+      pushToast(msg, "danger");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!state) return null;
+
+  return (
+    <Card title="הדפסה מרחוק" right={<Pill tone={state.enabled ? "success" : "muted"}>{state.enabled ? "פעיל" : "כבוי"}</Pill>}>
+      <p className="card-help">
+        מאפשר להדפיס מהמחשב המרוחק (כשמתחברים אליו) ישירות למדפסת כאן. עובד ע"י מדפסת וירטואלית מקומית
+        (משתמשת ב"Microsoft Print to PDF" הקיים של Windows) - נתמך רק ב-Windows, ועלול לדרוש הפעלת
+        RDesk כמנהל פעם אחת כדי להתקין אותה.
+      </p>
+      {!state.supported ? (
+        <Pill tone="muted">לא נתמך במערכת ההפעלה הזו</Pill>
+      ) : (
+        <Button variant={state.enabled ? "ghost" : "primary"} loading={busy} onClick={toggle}>
+          {state.enabled ? "כבה" : "הפעל"}
+        </Button>
+      )}
+    </Card>
   );
 }
 
