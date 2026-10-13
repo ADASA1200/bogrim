@@ -198,6 +198,8 @@ class ViewerClient:
                 self.clipboard.set(text)
         elif t == "wb":
             self.on_event("whiteboard", data=m.get("data"))
+        elif t == "elevate_result":
+            self.on_event("elevate_result", ok=bool(m.get("ok")))
         elif t == "bye":
             asyncio.ensure_future(self._closed("host ended the session"))
 
@@ -236,6 +238,9 @@ class ViewerClient:
 
     def send_whiteboard(self, data: dict) -> None:
         self._send({"t": "wb", "data": data})
+
+    def request_elevation(self) -> None:
+        self._send({"t": "elevate_request"})
 
     async def send_file(self, path: str) -> None:
         if self.files and self.perms.files:

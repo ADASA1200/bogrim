@@ -137,6 +137,22 @@ async def test_full_connect_approve_video_chat_disconnect(host_api, host_events,
     host_api.sendWhiteboard({"type": "clear"})
     assert await wait_for(lambda: any(k == "whiteboard" and d["data"] == {"type": "clear"} for k, d in viewer_events))
 
+    # הרמת הרשאות (UAC): בקשה מהצופה -> אירוע אצל המארח -> תגובה חוזרת.
+    # מדמים שה-OS "הציג" את ה-UAC בהצלחה (uac.request_elevation) - זה לינוקס,
+    # אין שום משמעות אמיתית ל-UAC כאן; זו בדיקת הפרוטוקול/הגישור בלבד.
+    import rdesk.uac as uac_module
+    uac_calls = []
+    orig_request_elevation = uac_module.request_elevation
+    uac_module.request_elevation = lambda *a, **kw: (uac_calls.append(1) or True)
+    try:
+        viewer_api.requestElevation()
+        assert await wait_for(lambda: any(k == "elevation_requested" for k, _ in host_events))
+        host_api.respondElevation(True)
+        assert await wait_for(lambda: any(k == "elevate_result" and d["ok"] is True for k, d in viewer_events))
+        assert uac_calls == [1]
+    finally:
+        uac_module.request_elevation = orig_request_elevation
+
     # הרשאות
     host_api.setPermission("files", False)
     assert await wait_for(lambda: any(k == "perms_changed" and not d["perms"]["files"] for k, d in viewer_events))
@@ -565,3 +581,38 @@ async def test_host_forwards_new_print_file_to_connected_viewer(host_api, host_e
 
     viewer_api.viewerDisconnect()
     assert await wait_for(lambda: any(k == "session_end" for k, _ in host_events))
+
+
+async def test_declined_elevation_never_calls_uac_and_reports_not_ok(host_api, host_events, runner):
+    import rdesk.uac as uac_module
+
+    uac_calls = []
+    orig = uac_module.request_elevation
+    uac_module.request_elevation = lambda *a, **kw: (uac_calls.append(1) or True)
+    try:
+        await wait_online(host_api)
+        port = host_api.embedded_port
+
+        viewer_api = webapp.ViewerAPI(runner, None)
+        viewer_events = []
+        viewer_api.push = recorder(viewer_events)
+
+        async def do_connect():
+            return await viewer_api._connect(f"ws://127.0.0.1:{port}", "135791357", "")
+
+        fut = runner.submit(do_connect())
+        assert await wait_for(lambda: any(k == "ask_approval" for k, _ in host_events), 10)
+        req = next(d for k, d in host_events if k == "ask_approval")
+        host_api.respondApproval(req["requestId"], {"control": True, "clipboard": True, "files": True, "chat": True})
+        await asyncio.wrap_future(fut)
+
+        viewer_api.requestElevation()
+        assert await wait_for(lambda: any(k == "elevation_requested" for k, _ in host_events))
+        host_api.respondElevation(False)   # המשתמש במארח דוחה את הבקשה
+
+        assert await wait_for(lambda: any(k == "elevate_result" and d["ok"] is False for k, d in viewer_events))
+        assert uac_calls == []   # לא ניגשים כלל ל-OS אם המשתמש דחה
+
+        viewer_api.viewerDisconnect()
+    finally:
+        uac_module.request_elevation = orig

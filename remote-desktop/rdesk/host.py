@@ -366,6 +366,8 @@ class HostService:
                 self.clipboard.set(text)
         elif t == "wb":
             self.on_event("whiteboard", peer=sess.peer, data=m.get("data"))
+        elif t == "elevate_request":
+            self.on_event("elevation_requested", peer=sess.peer)
         elif t == "bye":
             asyncio.ensure_future(self._end_session(sess))
 
@@ -408,6 +410,18 @@ class HostService:
     def send_whiteboard(self, data: dict) -> None:
         if self.session:
             self._ctl_send(self.session, {"t": "wb", "data": data})
+
+    async def respond_elevation(self, approved: bool) -> None:
+        """המשתמש במחשב המארח אישר/דחה בקשת הרמת-הרשאות (UAC) מהצופה.
+        אישור מנסה להציג את חלון ה-UAC האמיתי של Windows - אין דרך
+        לדעת כאן אם המשתמש אכן לחץ "כן" עליו, רק אם הוא *הוצג* (ראו uac.py)."""
+        if not self.session:
+            return
+        ok = False
+        if approved:
+            from . import uac
+            ok = uac.request_elevation()
+        self._ctl_send(self.session, {"t": "elevate_result", "ok": ok})
 
     def set_permissions(self, **kw) -> None:
         """שינוי הרשאות תוך כדי סשן (למשל ביטול שליטה)."""

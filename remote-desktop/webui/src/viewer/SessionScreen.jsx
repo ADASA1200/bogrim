@@ -60,6 +60,12 @@ export function SessionScreen({ info, onClosed }) {
         };
         if (map[d.kind]) pushToast(map[d.kind], d.kind === "error" || d.kind === "print_failed" ? "danger" : "default");
       }),
+      on("elevate_result", (d) =>
+        pushToast(
+          d.ok ? "בקשת הרמת ההרשאות נשלחה - יש לאשר את חלון ה-UAC במחשב המרוחק." : "בקשת הרמת ההרשאות נדחתה או נכשלה.",
+          d.ok ? "default" : "danger"
+        )
+      ),
     ];
     return () => offs.forEach((f) => f());
   }, [onClosed]);
@@ -107,6 +113,9 @@ export function SessionScreen({ info, onClosed }) {
         <Button variant="ghost" size="sm" onClick={() => setChatOpen((v) => !v)}>צ'אט</Button>
         <Button variant="ghost" size="sm" disabled={!perms.control} onClick={() => setTunnelOpen((v) => !v)}>
           מעבר פורט (TCP)
+        </Button>
+        <Button variant="ghost" size="sm" disabled={!perms.control} onClick={() => callApi("requestElevation")}>
+          בקש הרמת הרשאות (UAC)
         </Button>
         <Button variant="ghost" size="sm" onClick={toggleFullscreen}>מסך מלא</Button>
         <Button variant="danger" size="sm" onClick={disconnect}>נתק</Button>

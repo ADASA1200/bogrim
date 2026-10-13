@@ -248,6 +248,8 @@ class HostAPI(_WindowPusher):
             self.push("chat", {"text": kw["text"]})
         elif kind == "whiteboard":
             self.push("whiteboard", {"data": kw.get("data")})
+        elif kind == "elevation_requested":
+            self.push("elevation_requested", {"peer": kw.get("peer")})
         elif kind == "alert":
             self.push("alert", {"reason": kw.get("reason")})
         elif kind in ("file_received", "file_sent", "file_error"):
@@ -331,6 +333,9 @@ class HostAPI(_WindowPusher):
 
     def sendWhiteboard(self, data: dict) -> None:
         self.runner.call(self.service.send_whiteboard, data)
+
+    def respondElevation(self, approved: bool) -> None:
+        self.runner.submit(self.service.respond_elevation(bool(approved)))
 
     def pickAndSendFile(self):
         win = self.win
@@ -549,6 +554,8 @@ class ViewerAPI(_WindowPusher):
             self.push("chat", {"text": kw["text"]})
         elif kind == "whiteboard":
             self.push("whiteboard", {"data": kw.get("data")})
+        elif kind == "elevate_result":
+            self.push("elevate_result", {"ok": kw.get("ok")})
         elif kind == "perms":
             self.push("perms_changed", {"perms": kw["perms"]})
         elif kind == "closed":
@@ -582,6 +589,10 @@ class ViewerAPI(_WindowPusher):
     def sendWhiteboard(self, data: dict) -> None:
         if self.client:
             self.runner.call(self.client.send_whiteboard, data)
+
+    def requestElevation(self) -> None:
+        if self.client:
+            self.runner.call(self.client.request_elevation)
 
     def pickAndSendFile(self):
         win = self.win

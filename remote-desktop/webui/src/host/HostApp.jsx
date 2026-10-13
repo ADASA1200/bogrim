@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { callApi, on } from "../bridge";
 import { Tabs } from "../components/ui";
 import { pushToast } from "../components/ui";
+import { Modal, Button } from "../components/ui";
 import { MainTab } from "./MainTab";
 import { SettingsTab } from "./SettingsTab";
 import { HistoryTab } from "./HistoryTab";
@@ -22,6 +23,7 @@ export default function HostApp() {
   const [tab, setTab] = useState("main");
   const [state, setState] = useState(null);
   const [pendingAsk, setPendingAsk] = useState(null);
+  const [pendingElevation, setPendingElevation] = useState(null);
 
   useEffect(() => {
     callApi("getState").then(setState);
@@ -73,6 +75,7 @@ export default function HostApp() {
         )
       ),
       on("ask_approval", (d) => setPendingAsk(d)),
+      on("elevation_requested", (d) => setPendingElevation(d)),
       on("recent_updated", (d) => setState((s) => ({ ...s, recent: d.recent }))),
       on("embedded_update", (d) => setState((s) => ({ ...s, embedded: { ...s.embedded, ...d } }))),
     ];
@@ -110,6 +113,22 @@ export default function HostApp() {
           info={pendingAsk}
           onDone={() => setPendingAsk(null)}
         />
+      )}
+      {pendingElevation && (
+        <Modal title="בקשת הרשאות מנהל (UAC)" onClose={() => { callApi("respondElevation", false); setPendingElevation(null); }}>
+          <p>
+            הצד המרוחק (<span className="ltr">{pendingElevation.peer}</span>) מבקש להריץ פעולה בהרשאות מנהל במחשב הזה.
+            אישור יציג את חלון ה-UAC הרגיל של Windows - עליכם לאשר אותו גם כן שם.
+          </p>
+          <div className="modal-actions">
+            <Button variant="primary" onClick={() => { callApi("respondElevation", true); setPendingElevation(null); }}>
+              אשר
+            </Button>
+            <Button variant="ghost" onClick={() => { callApi("respondElevation", false); setPendingElevation(null); }}>
+              דחה
+            </Button>
+          </div>
+        </Modal>
       )}
     </div>
   );
