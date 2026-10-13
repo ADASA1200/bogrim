@@ -11,6 +11,17 @@ from . import config, net, protocol as P, strings as S
 
 
 def main(argv: list[str] | None = None) -> None:
+    raw = list(argv if argv is not None else sys.argv[1:])
+    # קישור הזמנה לסשן (rdesk://...) - למשל כשה-OS מפעיל אותנו כי המשתמש פתח
+    # קישור כזה (אחרי רישום הפרוטוקול ב-Windows, ראו installer.iss). לא עובר
+    # דרך argparse כי זה לא תת-פקודה.
+    invite_url = next((a for a in raw if a.startswith(f"{P.INVITE_SCHEME}://")), None)
+    if invite_url:
+        _setup_logging(False)
+        net.use_system_trust_store()
+        _run_viewer_ui(None, False, invite_url=invite_url)
+        return
+
     ap = argparse.ArgumentParser(prog="rdesk", description=S.CLI_DESC)
     ap.add_argument("-v", "--verbose", action="store_true")
     sub = ap.add_subparsers(dest="cmd")   # בלי פקודה = האפליקציה המלאה
@@ -74,14 +85,16 @@ def _run_host_ui(server: str | None, legacy: bool) -> None:
         HostApp(server).run()
 
 
-def _run_viewer_ui(server: str | None, legacy: bool) -> None:
+def _run_viewer_ui(server: str | None, legacy: bool, invite_url: str | None = None) -> None:
     if legacy:
+        # ה-UI הישן (tkinter) לא תומך בקישורי הזמנה - זה דורש את מסך
+        # ההתחברות של ה-React; זה בסדר, זה רק נתיב גיבוי אם pywebview לא זמין.
         from .gui_viewer import ViewerApp
         ViewerApp(server).run()
         return
     try:
         from .webapp import run_viewer
-        run_viewer(server)
+        run_viewer(server, invite_url=invite_url)
     except Exception:
         logging.getLogger("rdesk").exception(
             "נכשלה הפעלת ממשק ה-React (pywebview); נופל לממשק הישן (tkinter)")

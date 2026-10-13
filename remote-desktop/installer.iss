@@ -40,5 +40,14 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
+; רישום סכימת rdesk:// (קישורי הזמנה לסשן) - ב-HKCU כדי שלא ידרוש הרשאות
+; מנהל, בהתאמה ל-PrivilegesRequired=lowest. uninsdeletekey מסיר את הרישום
+; הזה (לא את שאר Software\Classes) בהסרת ההתקנה.
+[Registry]
+Root: HKCU; Subkey: "Software\Classes\rdesk"; ValueType: string; ValueName: ""; ValueData: "URL:RDesk Invite Link"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\rdesk"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\rdesk\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"
+Root: HKCU; Subkey: "Software\Classes\rdesk\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
+
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent

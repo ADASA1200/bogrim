@@ -241,6 +241,59 @@ async def test_interactive_mode_window_open_rejects_when_window_hidden(tmp_path)
         await srv.close()
 
 
+async def test_invite_link_token_bypasses_approval_once(tmp_path):
+    """קישור הזמנה לסשן: token חד-פעמי, בלי אישור ובלי סיסמה - והשנייה
+    שמנסים את אותו token היא כאילו אין בכלל (חד-פעמי באמת)."""
+    port = 18910
+    srv = await embedded.start(port)
+    try:
+        approval_calls = []
+
+        async def approve(info):
+            approval_calls.append(info)
+            return None
+
+        issued = {"invite-token-abc": (P.Permissions(control=True, clipboard=False, files=True, chat=True), 1e18)}
+
+        def invite_check(token):
+            entry = issued.pop(token, None)
+            if entry is None:
+                return None
+            perms, expires_at = entry
+            import time
+            return perms if time.time() <= expires_at else None
+
+        events = []
+        host = HostService(
+            f"ws://127.0.0.1:{port}", "666777888", screen=SyntheticScreen(), injector=NullInjector(),
+            clipboard=MemoryClipboard(), approval=approve, invite_check=invite_check,
+            interactive_mode="never",   # הקישור אמור לעבוד בכל זאת - עוקף גם את זה
+            on_event=lambda k, **kw: events.append((k, kw)),
+            download_dir=tmp_path / "recv", rtc_config=make_rtc_config([]),
+        )
+        task = asyncio.ensure_future(host.run())
+        await asyncio.wait_for(host.registered.wait(), 5)
+
+        v1 = ViewerClient(f"ws://127.0.0.1:{port}", clipboard=MemoryClipboard())
+        await v1.connect("666777888", invite="invite-token-abc")
+        assert v1.connected
+        assert v1.perms.clipboard is False
+        assert approval_calls == []
+        assert any(k == "session_start" and kw.get("mode") == "invite" for k, kw in events)
+        await v1.disconnect()
+        assert await wait_for(lambda: host.session is None)
+
+        # ניסיון שני עם אותו token - כאילו אין token בכלל, ו-interactive_mode="never" חוסם
+        v2 = ViewerClient(f"ws://127.0.0.1:{port}", clipboard=MemoryClipboard())
+        with pytest.raises(ConnectError, match="interactive disabled"):
+            await v2.connect("666777888", invite="invite-token-abc")
+
+        await host.stop()
+        task.cancel()
+    finally:
+        await srv.close()
+
+
 async def test_two_embedded_hosts_different_ports_are_independent(tmp_path):
     srv_a = await embedded.start(18902)
     srv_b = await embedded.start(18903)

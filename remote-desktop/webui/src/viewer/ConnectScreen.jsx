@@ -20,6 +20,8 @@ export function ConnectScreen({ onConnected }) {
   const [id, setId] = useState("");
   const [password, setPassword] = useState("");
   const [totp, setTotp] = useState("");
+  const [invite, setInvite] = useState("");
+  const [inviteText, setInviteText] = useState("");
   const [server, setServer] = useState("ws://127.0.0.1:8765");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -34,12 +36,27 @@ export function ConnectScreen({ onConnected }) {
         setServer(p.server || server);
         if (p.id) setId(p.id);
         if (p.password) setPassword(p.password);
+        if (p.invite) setInvite(p.invite);
         setRecent(p.recent || []);
-        if (p.autoConnect) connect(p.id, p.password, p.server);
+        if (p.autoConnect) connect(p.id, p.password, p.server, p.invite);
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function pasteInviteLink(text) {
+    setInviteText(text);
+    if (!text.startsWith("rdesk://")) return;
+    const parsed = await callApi("parseInviteLink", text);
+    if (!parsed) {
+      pushToast("קישור הזמנה לא תקין.", "danger");
+      return;
+    }
+    setId(parsed.id);
+    setInvite(parsed.token);
+    if (parsed.server) setServer(parsed.server);
+    connect(parsed.id, "", parsed.server || server, parsed.token);
+  }
 
   useEffect(() => {
     const cleanId = id.replace(/\D/g, "");
@@ -69,10 +86,11 @@ export function ConnectScreen({ onConnected }) {
     }
   }
 
-  async function connect(presetId, presetPw, presetServer) {
+  async function connect(presetId, presetPw, presetServer, presetInvite) {
     const useId = (presetId ?? id).replace(/\D/g, "");
     const usePw = presetPw ?? password;
     const useServer = presetServer ?? server;
+    const useInvite = presetInvite ?? invite;
     if (!useId) {
       setIsError(true);
       setMsg("יש להזין את המזהה של המחשב המרוחק");
@@ -80,9 +98,9 @@ export function ConnectScreen({ onConnected }) {
     }
     setBusy(true);
     setIsError(false);
-    setMsg(usePw ? "מתחבר..." : "ממתין לאישור המשתמש במחשב המרוחק...");
+    setMsg(useInvite ? "מתחבר עם קישור הזמנה..." : usePw ? "מתחבר..." : "ממתין לאישור המשתמש במחשב המרוחק...");
     try {
-      const info = await callApi("viewerConnect", useServer, useId, usePw, totp);
+      const info = await callApi("viewerConnect", useServer, useId, usePw, totp, useInvite);
       onConnected(info);
     } catch (e) {
       setIsError(true);
@@ -99,6 +117,9 @@ export function ConnectScreen({ onConnected }) {
         <h2 style={{ textAlign: "center", marginBottom: 20 }}>חיבור למחשב מרוחק</h2>
         <Card>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <Field label="קישור הזמנה (אופציונלי - דילוג על כל השדות למטה)">
+              <Input dir="ltr" placeholder="rdesk://connect/..." value={inviteText} onChange={(e) => pasteInviteLink(e.target.value)} />
+            </Field>
             <Field label="מזהה">
               <Input dir="ltr" placeholder="123 456 789" value={id} onChange={(e) => setId(e.target.value)} onKeyDown={(e) => e.key === "Enter" && connect()} />
             </Field>

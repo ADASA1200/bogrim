@@ -59,6 +59,8 @@ async function mockCall(method, args) {
     setTotp: (enabled) => (enabled ? { enabled: true, secret: "JBSWY3DPEHPK3PXP" } : { enabled: false, secret: null }),
     getWolMac: () => "",
     getViewerPreset: () => ({ server: "ws://127.0.0.1:8765", recent: ["111222333"] }),
+    createInviteLink: () => ({ url: "rdesk://connect/123456789/demo-token?server=ws%3A%2F%2F127.0.0.1%3A8765", expiresInMinutes: 10 }),
+    parseInviteLink: (url) => (url?.startsWith("rdesk://") ? { id: "123456789", token: "demo-token", server: "ws://127.0.0.1:8765" } : null),
   };
   await new Promise((r) => setTimeout(r, 150));
   return mocks[method] ? mocks[method]() : null;

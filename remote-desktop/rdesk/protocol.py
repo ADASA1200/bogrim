@@ -6,6 +6,7 @@ import hmac
 import json
 import re
 import secrets
+import urllib.parse
 from dataclasses import dataclass, asdict
 
 import os
@@ -76,6 +77,32 @@ def session_code(offer_sdp: str, answer_sdp: str) -> str:
     h = hashlib.sha256((_fingerprint(offer_sdp) + "|" + _fingerprint(answer_sdp)).encode()).digest()
     n = int.from_bytes(h[:4], "big") % 1_000_000
     return f"{n:06d}"[:3] + " " + f"{n:06d}"[3:]
+
+
+INVITE_SCHEME = "rdesk"
+
+
+def make_invite_url(host_id: str, token: str, server: str) -> str:
+    """קישור הזמנה לסשן (כמו Session Invitation של AnyDesk): פתיחתו מתחברת
+    אוטומטית, חד-פעמית, בלי להקליד שום דבר. ה-token נבדק/נצרך בצד המארח."""
+    return f"{INVITE_SCHEME}://connect/{clean_id(host_id)}/{token}?server={urllib.parse.quote(server, safe='')}"
+
+
+def parse_invite_url(url: str) -> dict | None:
+    try:
+        parsed = urllib.parse.urlparse((url or "").strip())
+    except ValueError:
+        return None
+    if parsed.scheme != INVITE_SCHEME or parsed.netloc != "connect":
+        return None
+    parts = [p for p in parsed.path.split("/") if p]
+    if len(parts) != 2:
+        return None
+    host_id, token = clean_id(parts[0]), parts[1]
+    if not host_id or not token:
+        return None
+    server = urllib.parse.parse_qs(parsed.query).get("server", [""])[0]
+    return {"id": host_id, "token": token, "server": server or None}
 
 
 @dataclass

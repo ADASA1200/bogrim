@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { callApi } from "../bridge";
 import { Button, Card, pushToast } from "../components/ui";
 
-const MODE_LABEL = { interactive: "אישור ידני", unattended: "ללא נוכחות", trusted: "מכשיר מהימן" };
+const MODE_LABEL = { interactive: "אישור ידני", unattended: "ללא נוכחות", trusted: "מכשיר מהימן", invite: "קישור הזמנה" };
 
 function formatId(id) {
   return (id || "").match(/.{1,3}/g)?.join(" ") || id;

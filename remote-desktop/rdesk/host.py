@@ -66,6 +66,7 @@ class HostService:
         unattended_key: bytes | None = None,
         unattended_perms: P.Permissions | None = None,
         trust_check: Callable[[str], Optional[P.Permissions]] | None = None,
+        invite_check: Callable[[str], Optional[P.Permissions]] | None = None,
         ip_whitelist: list[str] | None = None,
         totp_secret: str | None = None,
         interactive_mode: str = "always",
@@ -87,6 +88,9 @@ class HostService:
         # הרשאות שמורות למזהה ספציפי ("זכור את המכשיר הזה" בחלון האישור) -
         # מדלגות על בקשת האישור, בלי להיות תלויות בסיסמת גישה ללא נוכחות גלובלית.
         self.trust_check = trust_check
+        # קישור הזמנה לסשן (כמו Session Invitation של AnyDesk): token חד-פעמי
+        # שה-API הכין מראש - בודק/צורך אותו, בלי תלות בסיסמה גלובלית או באישור.
+        self.invite_check = invite_check
         # בקרת גישה (כמו ה-ACL/2FA/Interactive-Access של AnyDesk): רשימת IP
         # מורשים (רשימה ריקה = בלי הגבלה), קוד TOTP נוסף על סיסמת הגישה
         # ללא-נוכחות, ומצב לחיבור אינטראקטיבי (תמיד לשאול / רק כשהחלון פתוח / לעולם לא).
@@ -197,6 +201,9 @@ class HostService:
             nonce = nonce_t[0]
             sdp = str(p.get("sdp", ""))
             tag = p.get("auth")
+            invite_token = p.get("invite")
+            # נבדק/נצרך פעם אחת כאן (חד-פעמי) - התוצאה מועברת ל-_accept_offer
+            invite_perms = self.invite_check(invite_token) if invite_token and self.invite_check else None
             key, mode = None, "interactive"
             if tag and self.unattended_key is not None:
                 # הוקלדה סיסמה והמארח מוגדר לגישה ללא נוכחות - חייבת להיות נכונה
@@ -219,6 +226,8 @@ class HostService:
                     await self._send(peer, {"kind": "reject", "reason": "bad totp"})
                     return
                 key, mode = self.unattended_key, "unattended"
+            elif invite_perms is not None:
+                mode = "invite"   # קישור הזמנה תקף - עוקף גם את interactive_mode
             elif self.interactive_mode == "never":
                 # גישה אינטראקטיבית כבויה כליל - רק גישה ללא-נוכחות עם סיסמה
                 await self._send(peer, {"kind": "reject", "reason": "interactive disabled"})
@@ -231,15 +240,18 @@ class HostService:
             self._fails = 0
             self._busy_negotiating = True
             try:
-                await self._accept_offer(peer, nonce, sdp, key, mode)
+                await self._accept_offer(peer, nonce, sdp, key, mode, invite_perms)
             finally:
                 self._busy_negotiating = False
 
     # ------------------------------------------------------------ סשן
-    async def _accept_offer(self, peer: str, nonce: str, sdp: str, key: bytes | None, mode: str) -> None:
-        trusted_perms = None if mode == "unattended" or self.trust_check is None else self.trust_check(peer)
+    async def _accept_offer(self, peer: str, nonce: str, sdp: str, key: bytes | None, mode: str,
+                             invite_perms: P.Permissions | None = None) -> None:
+        trusted_perms = None if mode in ("unattended", "invite") or self.trust_check is None else self.trust_check(peer)
         if mode == "unattended":
             perms = P.Permissions(**self.unattended_perms.to_json())   # בלי אישור
+        elif mode == "invite":
+            perms = invite_perms   # קישור הזמנה חד-פעמי - בלי אישור
         elif trusted_perms is not None:
             perms, mode = trusted_perms, "trusted"   # מזהה שסומן "זכור" בעבר - בלי אישור
         elif self.approval is not None:

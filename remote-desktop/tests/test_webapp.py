@@ -3,6 +3,7 @@
 במקום evaluate_js אמיתי. הבדיקה הידנית המלאה (עם WebKitGTK אמיתי) נעשתה
 בנפרד; זו הבדיקה שרצה כל הזמן ב-CI."""
 import asyncio
+import time
 
 import pytest
 
@@ -351,3 +352,30 @@ def test_wake_on_lan_sends_packet_for_saved_mac(runner, tmp_path, monkeypatch):
     viewer.setWolMac("135791357", "AA:BB:CC:DD:EE:FF")
     viewer.wakeOnLan("135791357")
     assert sent == ["AA:BB:CC:DD:EE:FF"]
+
+
+def test_create_invite_link_is_one_time_use(host_api):
+    info = host_api.createInviteLink(minutes=5)
+    assert info["url"].startswith(f"rdesk://connect/{host_api.id}/")
+    parsed = P.parse_invite_url(info["url"])
+    assert parsed["id"] == host_api.id
+
+    perms = host_api._check_invite(parsed["token"])
+    assert perms is not None and perms.control is True
+    assert host_api._check_invite(parsed["token"]) is None   # חד-פעמי - בשנייה אין כלום
+
+
+def test_create_invite_link_expires(host_api, monkeypatch):
+    info = host_api.createInviteLink(minutes=5)
+    parsed = P.parse_invite_url(info["url"])
+
+    real_time = time.time
+    monkeypatch.setattr(webapp.time, "time", lambda: real_time() + 10 * 60)
+    assert host_api._check_invite(parsed["token"]) is None
+
+
+def test_parse_invite_link_via_viewer_api(runner):
+    viewer = webapp.ViewerAPI(runner, None)
+    url = P.make_invite_url("135791357", "tok", "ws://127.0.0.1:8765")
+    assert viewer.parseInviteLink(url) == {"id": "135791357", "token": "tok", "server": "ws://127.0.0.1:8765"}
+    assert viewer.parseInviteLink("not a link") is None

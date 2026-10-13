@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { callApi } from "../bridge";
-import { Button, Card, Checkbox, CopyButton, Field, Input, Pill } from "../components/ui";
+import { Button, Card, Checkbox, CopyButton, Field, Input, Pill, pushToast } from "../components/ui";
 import { Chat } from "./Chat";
 import { reasonText } from "./HostApp";
 
@@ -13,6 +13,19 @@ export function MainTab({ state, setState }) {
   const [connectPw, setConnectPw] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState("");
+  const [inviteUrl, setInviteUrl] = useState("");
+  const [creatingInvite, setCreatingInvite] = useState(false);
+
+  async function makeInvite() {
+    setCreatingInvite(true);
+    try {
+      const r = await callApi("createInviteLink", 10);
+      setInviteUrl(r.url);
+      pushToast(`נוצר קישור הזמנה חד-פעמי, בתוקף ל-${r.expiresInMinutes} דקות.`);
+    } finally {
+      setCreatingInvite(false);
+    }
+  }
 
   async function openViewer() {
     const id = connectId.replace(/\D/g, "");
@@ -51,6 +64,22 @@ export function MainTab({ state, setState }) {
           </Pill>
         </div>
         <p className="card-help">חיבור עם הסיסמה הזמנית דורש את אישורך בכל פעם.</p>
+        <div className="mt-2">
+          <Button variant="ghost" size="sm" loading={creatingInvite} onClick={makeInvite}>
+            צור קישור הזמנה לסשן
+          </Button>
+          {inviteUrl && (
+            <div className="row-between mt-1">
+              <span className="text-sm ltr" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{inviteUrl}</span>
+              <CopyButton text={inviteUrl} />
+            </div>
+          )}
+          {inviteUrl && (
+            <p className="card-help">
+              קישור חד-פעמי, בתוקף ל-10 דקות - פתיחתו מתחברת אוטומטית בלי אישור ובלי סיסמה. שתפו רק עם מי שבוטחים בו.
+            </p>
+          )}
+        </div>
       </Card>
 
       {state.embedded?.enabled && (
@@ -135,6 +164,7 @@ function SessionPanel({ state, setState }) {
     <>
       {session.mode === "unattended" && <Pill tone="warn">גישה ללא נוכחות (ללא אישור)</Pill>}
       {session.mode === "trusted" && <Pill tone="success">מכשיר מהימן (אושר אוטומטית)</Pill>}
+      {session.mode === "invite" && <Pill tone="success">התחבר עם קישור הזמנה</Pill>}
       <p className="text-faint mt-1">קוד אבטחה: {session.code}</p>
       <div className="row mt-2" style={{ gap: 16, flexWrap: "wrap" }}>
         <Checkbox label="קבצים" checked={session.perms.files} onChange={(e) => togglePerm("files", e.target.checked)} />

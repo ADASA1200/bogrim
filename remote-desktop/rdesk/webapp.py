@@ -12,6 +12,7 @@ import io
 import json
 import sys
 import threading
+import time
 import uuid
 from pathlib import Path
 
@@ -97,18 +98,35 @@ class HostAPI(_WindowPusher):
         self._started = False
         self.tray = None
         self._window_visible = True
+        self._invites: dict[str, tuple[P.Permissions, float]] = {}
 
         host_server = f"ws://127.0.0.1:{emb_port}" if emb_on else self.server
         self.service = HostService(
             host_server, self.id, approval=self._approval, on_event=self._on_event,
             unattended_key=key, unattended_perms=uperms, injector=injector, screen=screen,
-            trust_check=self._check_trust,
+            trust_check=self._check_trust, invite_check=self._check_invite,
             ip_whitelist=config.get_ip_whitelist(self.cfg), totp_secret=config.get_totp_secret(self.cfg),
             interactive_mode=config.get_interactive_mode(self.cfg), window_open_check=lambda: self._window_visible,
         )
 
     def _check_trust(self, peer: str) -> P.Permissions | None:
         return config.get_trusted(self.cfg, peer)
+
+    def _check_invite(self, token: str) -> P.Permissions | None:
+        entry = self._invites.pop(token, None)   # חד-פעמי - תמיד מוסר, גם אם פג תוקף
+        if entry is None:
+            return None
+        perms, expires_at = entry
+        return perms if time.time() <= expires_at else None
+
+    def createInviteLink(self, minutes: int = 10) -> dict:
+        now = time.time()
+        self._invites = {t: v for t, v in self._invites.items() if v[1] > now}   # ניקוי ישנים
+        token = uuid.uuid4().hex
+        perms = P.Permissions(control=True, clipboard=True, files=True, chat=True)
+        minutes = max(1, int(minutes))
+        self._invites[token] = (perms, now + minutes * 60)
+        return {"url": P.make_invite_url(self.id, token, self.server), "expiresInMinutes": minutes}
 
     def start(self) -> None:
         # win.events.loaded עלול לירות יותר מפעם אחת (ניווט/טעינה חוזרת) -
@@ -388,6 +406,9 @@ class ViewerAPI(_WindowPusher):
         cfg = config.load()
         return {"server": config.server_url(None), "recent": cfg.get("recent", [])}
 
+    def parseInviteLink(self, url: str) -> dict | None:
+        return P.parse_invite_url(url)
+
     def getWolMac(self, host_id: str) -> str:
         return config.get_wol_mac(config.load(), P.clean_id(host_id)) or ""
 
@@ -403,17 +424,17 @@ class ViewerAPI(_WindowPusher):
             raise Exception("no_mac_saved")
         wol.send(mac)
 
-    def viewerConnect(self, server: str, host_id: str, password: str, totp: str = ""):
-        fut = self.runner.submit(self._connect(server, host_id, password, totp))
+    def viewerConnect(self, server: str, host_id: str, password: str, totp: str = "", invite: str = ""):
+        fut = self.runner.submit(self._connect(server, host_id, password, totp, invite))
         try:
             return fut.result(95)
         except Exception as e:
             raise Exception(str(e)) from None
 
-    async def _connect(self, server: str, host_id: str, password: str, totp: str = ""):
+    async def _connect(self, server: str, host_id: str, password: str, totp: str = "", invite: str = ""):
         client = ViewerClient(server, on_event=self._on_event)
         self.client = client
-        await client.connect(host_id, password, totp)
+        await client.connect(host_id, password, totp, invite)
         self._pump_task = asyncio.ensure_future(self._frame_pump())
         return {
             "monitors": [m for m in client.monitors],
@@ -487,9 +508,16 @@ def run_app(server: str | None = None) -> None:
     webview.start()
 
 
-def run_viewer(server: str | None = None) -> None:
+def run_viewer(server: str | None = None, invite_url: str | None = None) -> None:
     runner = AsyncRunner()
     cfg = config.load()
     preset = {"server": config.server_url(server), "recent": cfg.get("recent", [])}
+    if invite_url:
+        parsed = P.parse_invite_url(invite_url)
+        if parsed:
+            preset.update({
+                "id": parsed["id"], "invite": parsed["token"], "password": "",
+                "server": parsed["server"] or preset["server"], "autoConnect": True,
+            })
     open_viewer_window(server, runner, preset)
     webview.start()
