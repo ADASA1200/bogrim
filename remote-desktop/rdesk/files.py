@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
+import posixpath
 import re
 import secrets
 from pathlib import Path
@@ -12,8 +12,15 @@ from . import protocol as P
 
 
 def safe_name(name: str) -> str:
-    """מונע path traversal: משאיר שם קובץ בלבד."""
-    name = os.path.basename(str(name).replace("\\", "/"))
+    """מונע path traversal: משאיר שם קובץ בלבד.
+
+    posixpath.basename בכוונה, לא os.path.basename: ntpath (שזה os.path על
+    Windows) מזהה "X:" כאות-כונן ומשמיט אותה מתוך basename() - כך ששם קובץ
+    שמכיל ':' כתו רגיל (למשל "a:b?.txt") היה נחתך אחרת בהתאם לפלטפורמה
+    שעליה המארח המקבל רץ. posixpath לא מכיר drive letters בכלל, אז הוא
+    משאיר את כל התו ל-regex שאחריו (שממילא מחליף ':' וכל תו אסור אחר ב-_),
+    וההתנהגות דטרמיניסטית ללא תלות בפלטפורמה."""
+    name = posixpath.basename(str(name).replace("\\", "/"))
     name = re.sub(r"[\x00-\x1f<>:\"|?*]", "_", name).strip(". ")
     return name or "file"
 
