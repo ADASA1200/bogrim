@@ -124,14 +124,18 @@ class MainActivity : Activity(), ClientListener {
     private fun buildConnectScreen() {
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(40), dp(24), dp(24))
+            setBackgroundColor(resources.getColor(R.color.bg, theme))
+            setPadding(dp(20), dp(36), dp(20), dp(24))
         }
         col.addView(TextView(this).apply {
             setText(R.string.connect_title)
             textSize = 24f
             setTypeface(typeface, Typeface.BOLD)
-            setPadding(0, 0, 0, dp(20))
+            setTextColor(resources.getColor(R.color.fg, theme))
+            setPadding(dp(4), 0, dp(4), dp(16))
         })
+
+        val mainCard = card()
         inviteInput = field(R.string.hint_invite, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI).apply {
             layoutDirection = View.LAYOUT_DIRECTION_LTR
             gravity = Gravity.START
@@ -155,53 +159,50 @@ class MainActivity : Activity(), ClientListener {
             layoutDirection = View.LAYOUT_DIRECTION_LTR
             gravity = Gravity.START
         }
-        col.addView(inviteInput)
-        col.addView(idInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
-        col.addView(passInput)
-        col.addView(totpInput)
-        col.addView(TextView(this).apply {
+        mainCard.addView(inviteInput)
+        mainCard.addView(idInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        mainCard.addView(passInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        mainCard.addView(totpInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        mainCard.addView(TextView(this).apply {
             setText(R.string.pw_help)
-            setTextColor(resources.getColor(R.color.muted, theme))
-            textSize = 13f
-            setPadding(dp(4), 0, dp(4), dp(12))
+            setTextColor(resources.getColor(R.color.fg_faint, theme))
+            textSize = 12.5f
+            setPadding(dp(2), dp(8), dp(2), dp(4))
         })
-        col.addView(serverInput)
-        connectBtn = Button(this).apply {
-            setText(R.string.btn_connect)
-            textSize = 18f
-            setOnClickListener { connect() }
-        }
-        col.addView(connectBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)).apply { topMargin = dp(12) })
-        statusText = TextView(this).apply { setPadding(0, dp(12), 0, dp(12)); textSize = 15f }
-        col.addView(statusText)
-        col.addView(TextView(this).apply {
+        mainCard.addView(serverInput)
+        connectBtn = primaryButton(R.string.btn_connect) { connect() }
+        mainCard.addView(connectBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(14) })
+        statusText = TextView(this).apply { setPadding(dp(2), dp(10), dp(2), 0); textSize = 14f }
+        mainCard.addView(statusText)
+        col.addView(mainCard)
+
+        col.addView(spacer(16))
+        val recentCard = card()
+        recentCard.addView(TextView(this).apply {
             setText(R.string.recent)
-            setTextColor(resources.getColor(R.color.muted, theme))
+            setTextColor(resources.getColor(R.color.fg_faint, theme))
+            textSize = 12.5f
         })
         recentBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        col.addView(recentBox)
-        col.addView(Button(this).apply {
-            setText(R.string.history_btn)
-            isAllCaps = false
-            setBackgroundColor(Color.TRANSPARENT)
-            setOnClickListener { showHistory() }
-        })
+        recentCard.addView(recentBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+        recentCard.addView(ghostButton(R.string.history_btn) { showHistory() }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
+        col.addView(recentCard)
+
+        col.addView(spacer(16))
         col.addView(buildWolSection())
         connectScreen = ScrollView(this).apply {
             isFillViewport = true
+            setBackgroundColor(resources.getColor(R.color.bg, theme))
             addView(col)
         }
     }
 
     private fun buildWolSection(): View {
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(16), 0, 0)
-        }
+        val box = card()
         box.addView(TextView(this).apply {
             setText(R.string.wol_title)
-            setTextColor(resources.getColor(R.color.muted, theme))
-            textSize = 13f
+            setTextColor(resources.getColor(R.color.fg_faint, theme))
+            textSize = 12.5f
         })
         wolMacInput = field(R.string.wol_mac_hint, InputType.TYPE_CLASS_TEXT).apply {
             layoutDirection = View.LAYOUT_DIRECTION_LTR
@@ -224,13 +225,9 @@ class MainActivity : Activity(), ClientListener {
                 }
             }
         }
-        box.addView(wolMacInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
-        wolBtn = Button(this).apply {
-            setText(R.string.wol_wake)
-            isAllCaps = false
-            setOnClickListener { wakeOnLan() }
-        }
-        box.addView(wolBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+        box.addView(wolMacInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        wolBtn = ghostButton(R.string.wol_wake) { wakeOnLan() }
+        box.addView(wolBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
         idInput.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
@@ -274,6 +271,41 @@ class MainActivity : Activity(), ClientListener {
         setHint(hintRes)
         inputType = type
         setSingleLine()
+        setBackgroundResource(R.drawable.bg_input)
+        setPadding(dp(12), dp(10), dp(12), dp(10))
+        setTextColor(resources.getColor(R.color.fg, theme))
+        setHintTextColor(resources.getColor(R.color.fg_faint, theme))
+    }
+
+    /** כרטיס לבן מעוגל-פינות (כמו .card בצד שולחן העבודה) - עוטף קבוצת שדות קשורה. */
+    private fun card(): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setBackgroundResource(R.drawable.bg_card)
+        setPadding(dp(16), dp(16), dp(16), dp(16))
+    }
+
+    private fun primaryButton(textRes: Int, onClick: () -> Unit) = Button(this).apply {
+        setText(textRes)
+        isAllCaps = false
+        setTextColor(Color.WHITE)
+        setBackgroundResource(R.drawable.bg_btn_primary)
+        stateListAnimator = null
+        setOnClickListener { onClick() }
+    }
+
+    private fun ghostButton(textRes: Int, onClick: () -> Unit) = ghostButton(getString(textRes), onClick)
+
+    private fun ghostButton(label: CharSequence, onClick: () -> Unit) = Button(this).apply {
+        text = label
+        isAllCaps = false
+        setTextColor(resources.getColor(R.color.fg, theme))
+        setBackgroundResource(R.drawable.bg_btn_ghost)
+        stateListAnimator = null
+        setOnClickListener { onClick() }
+    }
+
+    private fun spacer(heightDp: Int) = View(this).apply {
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(heightDp))
     }
 
     private fun showConnect(message: String?, isError: Boolean = true) {
@@ -283,7 +315,7 @@ class MainActivity : Activity(), ClientListener {
         connectBtn.isEnabled = true
         passInput.setText("")
         statusText.text = message ?: ""
-        statusText.setTextColor(if (isError) resources.getColor(R.color.danger, theme) else Color.DKGRAY)
+        statusText.setTextColor(resources.getColor(if (isError) R.color.danger else R.color.muted, theme))
         refreshRecent()
     }
 
@@ -298,11 +330,10 @@ class MainActivity : Activity(), ClientListener {
     private fun refreshRecent() {
         recentBox.removeAllViews()
         for (id in recentIds()) {
-            recentBox.addView(Button(this).apply {
-                text = Protocol.formatId(id)
-                isAllCaps = false
-                setOnClickListener { idInput.setText(id); passInput.requestFocus() }
-            })
+            recentBox.addView(
+                ghostButton(Protocol.formatId(id)) { idInput.setText(id); passInput.requestFocus() },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) }
+            )
         }
     }
 

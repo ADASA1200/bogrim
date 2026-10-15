@@ -1,9 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="brand">#2F6FED</color>
-    <color name="bg">#F6F8FA</color>
+    <color name="brand_hover">#1F5BD6</color>
+    <color name="bg">#F4F5F8</color>
     <color name="bg_dark">#0D1117</color>
     <color name="bar">#161B22</color>
-    <color name="muted">#6E7781</color>
-    <color name="danger">#CF222E</color>
+    <color name="muted">#5C6577</color>
+    <color name="danger">#D8303F</color>
+
+    <!-- ערכת נושא בהירה - תואמת למשתני ה-CSS בצד שולחן העבודה (theme.css) -->
+    <color name="card_bg">#FFFFFF</color>
+    <color name="input_bg">#EEF0F4</color>
+    <color name="border">#D9DCE3</color>
+    <color name="border_soft">#E7E9EE</color>
+    <color name="fg">#1A1D24</color>
+    <color name="fg_faint">#8A93A6</color>
+    <color name="success">#15995F</color>
+    <color name="success_soft">#E3F5EC</color>
+    <color name="danger_soft">#FCE9EB</color>
+    <color name="accent_soft">#E7EFFD</color>
 </resources>
