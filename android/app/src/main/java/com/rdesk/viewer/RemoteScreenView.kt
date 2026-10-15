@@ -35,6 +35,18 @@ class RemoteScreenView(
 
     val renderer = SurfaceViewRenderer(context)
     private val cursor = CursorView(context)
+    private val whiteboard = WhiteboardOverlay(context) { contentRect() }
+
+    var onWhiteboardStroke: ((JSONObject) -> Unit)?
+        get() = whiteboard.onStroke
+        set(v) { whiteboard.onStroke = v }
+
+    var whiteboardActive: Boolean
+        get() = whiteboard.active
+        set(v) { whiteboard.active = v }
+
+    fun applyRemoteWhiteboard(data: JSONObject?) = whiteboard.applyRemote(data)
+    fun clearWhiteboard() = whiteboard.clearLocal()
     private val handler = Handler(Looper.getMainLooper())
     private val slop = ViewConfiguration.get(context).scaledTouchSlop
     private val density = resources.displayMetrics.density
@@ -79,6 +91,7 @@ class RemoteScreenView(
         renderer.setEnableHardwareScaler(true)
         addView(renderer, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(cursor, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        addView(whiteboard, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         layoutDirection = LAYOUT_DIRECTION_LTR      // התמונה והמגע אף פעם לא מתהפכים
     }
 

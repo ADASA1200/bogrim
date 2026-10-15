@@ -44,6 +44,7 @@ interface ClientListener {
     fun onClosed(reasonCode: String)
     fun onFileEvent(kind: String, name: String, detail: String)
     fun onVideoTrack(track: VideoTrack)
+    fun onWhiteboard(data: JSONObject?)
 }
 
 /**
@@ -92,6 +93,8 @@ class RDeskClient(
     private var control: DataChannel? = null
     private var filesChannel: DataChannel? = null
     private var files: FileTransfer? = null
+    private var tunnelChannel: DataChannel? = null
+    private var tunnel: TunnelViewer? = null
 
     @Volatile var perms = Perms()
         private set
@@ -102,7 +105,10 @@ class RDeskClient(
     private val hello = CompletableDeferred<JSONObject>()
 
     // ------------------------------------------------------------------ חיבור
-    suspend fun connect(serverUrl: String, hostIdRaw: String, password: String): ConnectionInfo =
+    suspend fun connect(
+        serverUrl: String, hostIdRaw: String, password: String,
+        totp: String = "", invite: String = "",
+    ): ConnectionInfo =
         withContext(Dispatchers.IO) {
             val hostId = Protocol.cleanId(hostIdRaw)
             val inbox = Channel<JSONObject>(Channel.UNLIMITED)
@@ -177,12 +183,14 @@ class RDeskClient(
                 )
                 control = peer.createDataChannel("control", DataChannel.Init())
                 filesChannel = peer.createDataChannel("files", DataChannel.Init())
+                tunnelChannel = peer.createDataChannel("tunnel", DataChannel.Init())
                 control!!.registerObserver(SimpleDcObserver { onControlMessage(it) })
                 files = FileTransfer(
                     filesChannel!!, downloadDir,
                     allowed = { perms.files },
                     onEvent = { kind, name, detail -> listener.onFileEvent(kind, name, detail) },
                 )
+                tunnel = TunnelViewer(tunnelChannel!!)
 
                 val offer = peer.awaitCreateOffer()
                 peer.awaitSetLocal(offer)
@@ -193,6 +201,8 @@ class RDeskClient(
                     JSONObject().put("kind", "offer").put("sdp", offerSdp)
                         .put("auth", if (key != null) Protocol.authTag(key, nonce, "viewer", offerSdp) else JSONObject.NULL)
                         .put("computer", deviceName(appContext))
+                        .put("totp", if (totp.isNotEmpty()) totp else JSONObject.NULL)
+                        .put("invite", if (invite.isNotEmpty()) invite else JSONObject.NULL)
                 )
 
                 val answer = nextPayload(inbox, 90_000)      // כולל המתנה לאישור המשתמש
@@ -280,6 +290,7 @@ class RDeskClient(
                 val text = m.optString("text")
                 if (text.toByteArray().size <= Protocol.MAX_CLIPBOARD_BYTES) listener.onClipboard(text)
             }
+            "wb" -> listener.onWhiteboard(m.optJSONObject("data"))
             "bye" -> close("host ended the session")
         }
     }
@@ -317,6 +328,8 @@ class RDeskClient(
 
     fun sendChat(text: String) = send(JSONObject().put("t", "chat").put("text", text.take(2000)))
 
+    fun sendWhiteboard(data: JSONObject) = send(JSONObject().put("t", "wb").put("data", data))
+
     fun sendClipboard(text: String) {
         if (perms.clipboard && text.toByteArray().size <= Protocol.MAX_CLIPBOARD_BYTES) {
             send(JSONObject().put("t", "clip").put("text", text))
@@ -344,13 +357,28 @@ class RDeskClient(
         val was = connected
         connected = false
         runCatching { files?.close() }
+        runCatching { tunnel?.closeAll() }
         runCatching { control?.close() }
         runCatching { filesChannel?.close() }
+        runCatching { tunnelChannel?.close() }
         runCatching { pc?.close() }
         runCatching { pc?.dispose() }
         pc = null
         if (was) listener.onClosed(reason)
     }
+
+    // ------------------------------------------------------------------ TCP Tunneling
+    suspend fun startTunnel(localPort: Int, remoteHost: String, remotePort: Int) {
+        if (!perms.control) throw IllegalStateException("not_allowed")
+        tunnel?.startForward(localPort, remoteHost, remotePort)
+            ?: throw IllegalStateException("not_connected")
+    }
+
+    fun stopTunnel(localPort: Int) {
+        tunnel?.stopForward(localPort)
+    }
+
+    fun tunnelActivePorts(): List<Int> = tunnel?.activePorts() ?: emptyList()
 }
 
 // ---------------------------------------------------------------------- עזרים של WebRTC

@@ -36,6 +36,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.webrtc.VideoTrack
 import java.io.File
@@ -58,12 +59,18 @@ class MainActivity : Activity(), ClientListener {
 
     // מסך חיבור
     private lateinit var connectScreen: View
+    private lateinit var inviteInput: EditText
     private lateinit var idInput: EditText
     private lateinit var passInput: EditText
+    private lateinit var totpInput: EditText
     private lateinit var serverInput: EditText
     private lateinit var connectBtn: Button
     private lateinit var statusText: TextView
     private lateinit var recentBox: LinearLayout
+    private lateinit var wolMacInput: EditText
+    private lateinit var wolBtn: Button
+    private var pendingInviteToken: String? = null
+    private var invitePasting = false
 
     // סשן
     private var client: RDeskClient? = null
@@ -125,15 +132,33 @@ class MainActivity : Activity(), ClientListener {
             setTypeface(typeface, Typeface.BOLD)
             setPadding(0, 0, 0, dp(20))
         })
+        inviteInput = field(R.string.hint_invite, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI).apply {
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            gravity = Gravity.START
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: Editable?) {
+                    if (!invitePasting) pasteInviteLink(s?.toString() ?: "")
+                }
+            })
+        }
         idInput = field(R.string.hint_id, InputType.TYPE_CLASS_NUMBER).apply { textSize = 22f }
         passInput = field(R.string.hint_password, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
+        totpInput = field(R.string.hint_totp, InputType.TYPE_CLASS_NUMBER).apply {
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            gravity = Gravity.START
+            filters = arrayOf(android.text.InputFilter.LengthFilter(6))
+        }
         serverInput = field(R.string.hint_server, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI).apply {
             setText(prefs.getString(PREF_SERVER, BuildConfig.DEFAULT_SERVER))
             layoutDirection = View.LAYOUT_DIRECTION_LTR
             gravity = Gravity.START
         }
-        col.addView(idInput)
+        col.addView(inviteInput)
+        col.addView(idInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
         col.addView(passInput)
+        col.addView(totpInput)
         col.addView(TextView(this).apply {
             setText(R.string.pw_help)
             setTextColor(resources.getColor(R.color.muted, theme))
@@ -161,10 +186,88 @@ class MainActivity : Activity(), ClientListener {
             setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener { showHistory() }
         })
+        col.addView(buildWolSection())
         connectScreen = ScrollView(this).apply {
             isFillViewport = true
             addView(col)
         }
+    }
+
+    private fun buildWolSection(): View {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(16), 0, 0)
+        }
+        box.addView(TextView(this).apply {
+            setText(R.string.wol_title)
+            setTextColor(resources.getColor(R.color.muted, theme))
+            textSize = 13f
+        })
+        wolMacInput = field(R.string.wol_mac_hint, InputType.TYPE_CLASS_TEXT).apply {
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            gravity = Gravity.START
+            // שומרים/מאמתים רק באיבוד פוקוס (כמו onBlur בצד הדסקטופ) - לא
+            // בכל הקשה, שהיה מציג "MAC לא תקין" תוך כדי הקלדה תקינה חלקית.
+            setOnFocusChangeListener { _, hasFocus ->
+                if (hasFocus) return@setOnFocusChangeListener
+                val id = Protocol.cleanId(idInput.text.toString())
+                val mac = text.toString().trim()
+                if (id.length != 9) return@setOnFocusChangeListener
+                if (mac.isEmpty()) {
+                    WakeOnLan.setMac(prefs, id, "")
+                    return@setOnFocusChangeListener
+                }
+                if (runCatching { WakeOnLan.normalizeMac(mac) }.isSuccess) {
+                    WakeOnLan.setMac(prefs, id, mac)
+                } else {
+                    Toast.makeText(this@MainActivity, R.string.wol_bad_mac, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        box.addView(wolMacInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+        wolBtn = Button(this).apply {
+            setText(R.string.wol_wake)
+            isAllCaps = false
+            setOnClickListener { wakeOnLan() }
+        }
+        box.addView(wolBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+        idInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                val id = Protocol.cleanId(idInput.text.toString())
+                wolMacInput.setText(if (id.length == 9) WakeOnLan.getMac(prefs, id) ?: "" else "")
+            }
+        })
+        return box
+    }
+
+    private fun wakeOnLan() {
+        val id = Protocol.cleanId(idInput.text.toString())
+        val mac = WakeOnLan.getMac(prefs, id)
+        if (mac == null) {
+            Toast.makeText(this, R.string.wol_no_mac, Toast.LENGTH_SHORT).show()
+            return
+        }
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) { WakeOnLan.send(mac) }
+            Toast.makeText(this@MainActivity, if (ok) R.string.wol_sent else R.string.wol_bad_mac, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun pasteInviteLink(text: String) {
+        if (!text.startsWith("rdesk://")) return
+        val link = Protocol.parseInviteUrl(text)
+        if (link == null) {
+            Toast.makeText(this, R.string.invite_link_invalid, Toast.LENGTH_SHORT).show()
+            return
+        }
+        pendingInviteToken = link.token
+        invitePasting = true
+        idInput.setText(link.id)
+        if (link.server.isNotEmpty()) serverInput.setText(link.server)
+        invitePasting = false
+        connect(invite = link.token)
     }
 
     private fun field(hintRes: Int, type: Int) = EditText(this).apply {
@@ -203,7 +306,7 @@ class MainActivity : Activity(), ClientListener {
         }
     }
 
-    private fun connect() {
+    private fun connect(invite: String = "") {
         val id = Protocol.cleanId(idInput.text.toString())
         if (id.isEmpty()) {
             statusText.setTextColor(resources.getColor(R.color.danger, theme))
@@ -211,18 +314,25 @@ class MainActivity : Activity(), ClientListener {
             return
         }
         val pw = passInput.text.toString()
+        val totp = totpInput.text.toString().trim()
         val server = serverInput.text.toString().trim()
         prefs.edit().putString(PREF_SERVER, server).apply()
         connectBtn.isEnabled = false
         statusText.setTextColor(Color.DKGRAY)
-        statusText.setText(if (pw.isEmpty()) R.string.waiting_approval else R.string.connecting)
+        statusText.setText(
+            when {
+                invite.isNotEmpty() -> R.string.connecting_invite
+                pw.isEmpty() -> R.string.waiting_approval
+                else -> R.string.connecting
+            }
+        )
         hideKeyboard(idInput)
 
         val c = RDeskClient(applicationContext, this, downloadDir())
         client = c
         scope.launch {
             try {
-                val i = c.connect(server, id, pw)
+                val i = c.connect(server, id, pw, totp, invite)
                 saveRecent(id)
                 activePeerId = id
                 ConnectionHistory.startEntry(prefs, id, i.mode)
@@ -239,6 +349,7 @@ class MainActivity : Activity(), ClientListener {
 
     private fun reasonText(code: String): String = when (code) {
         "bad password" -> getString(R.string.err_bad_password)
+        "bad totp" -> getString(R.string.err_bad_totp)
         "declined" -> getString(R.string.err_declined)
         "busy" -> getString(R.string.err_busy)
         "blocked" -> getString(R.string.err_blocked)
@@ -264,6 +375,7 @@ class MainActivity : Activity(), ClientListener {
 
         val screen = RemoteScreenView(this) { ev -> client?.sendInput(ev) }
         screen.viewOnly = !i.perms.control
+        screen.onWhiteboardStroke = { data -> client?.sendWhiteboard(data) }
         screenView = screen
         pendingTrack?.let { screen.attach(it) }
         if (!i.perms.control) Toast.makeText(this, R.string.no_control, Toast.LENGTH_LONG).show()
@@ -330,7 +442,10 @@ class MainActivity : Activity(), ClientListener {
         m.add(0, 4, 3, R.string.quality)
         m.add(0, 5, 4, R.string.chat)
         m.add(0, 6, 5, R.string.send_file).isEnabled = c.perms.files
-        m.add(0, 7, 6, R.string.disconnect)
+        m.add(0, 8, 6, R.string.whiteboard).apply { isCheckable = true; isChecked = screen.whiteboardActive }
+        m.add(0, 9, 7, R.string.whiteboard_clear)
+        m.add(0, 10, 8, R.string.tunnel).isEnabled = c.perms.control
+        m.add(0, 7, 9, R.string.disconnect)
         pm.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> screen.viewOnly = !screen.viewOnly
@@ -340,6 +455,9 @@ class MainActivity : Activity(), ClientListener {
                 5 -> showChat()
                 6 -> pickFile()
                 7 -> confirmDisconnect()
+                8 -> screen.whiteboardActive = !screen.whiteboardActive
+                9 -> { screen.clearWhiteboard(); client?.sendWhiteboard(JSONObject().put("type", "clear")) }
+                10 -> showTunnelDialog()
             }
             true
         }
@@ -390,6 +508,64 @@ class MainActivity : Activity(), ClientListener {
             }
             .setNegativeButton(R.string.close, null)
             .setOnDismissListener { chatView = null }
+            .show()
+    }
+
+    private fun showTunnelDialog() {
+        val c = client ?: return
+        val listBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val localInput = EditText(this).apply { setHint(R.string.tunnel_local_port); inputType = InputType.TYPE_CLASS_NUMBER; layoutDirection = View.LAYOUT_DIRECTION_LTR }
+        val hostInput = EditText(this).apply { setHint(R.string.tunnel_remote_host); setText("127.0.0.1"); layoutDirection = View.LAYOUT_DIRECTION_LTR }
+        val remoteInput = EditText(this).apply { setHint(R.string.tunnel_remote_port); inputType = InputType.TYPE_CLASS_NUMBER; layoutDirection = View.LAYOUT_DIRECTION_LTR }
+
+        fun refreshList() {
+            listBox.removeAllViews()
+            for (port in c.tunnelActivePorts()) {
+                val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                row.addView(TextView(this).apply { text = "127.0.0.1:$port"; layoutDirection = View.LAYOUT_DIRECTION_LTR }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                row.addView(Button(this).apply {
+                    setText(R.string.tunnel_close)
+                    isAllCaps = false
+                    setOnClickListener { c.stopTunnel(port); refreshList() }
+                })
+                listBox.addView(row)
+            }
+        }
+        refreshList()
+
+        val ll = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+            addView(listBox)
+            addView(localInput)
+            addView(hostInput)
+            addView(remoteInput)
+            addView(Button(this@MainActivity).apply {
+                setText(R.string.tunnel_add)
+                isAllCaps = false
+                setOnClickListener {
+                    val localPort = localInput.text.toString().trim().toIntOrNull()
+                    val remotePort = remoteInput.text.toString().trim().toIntOrNull()
+                    val host = hostInput.text.toString().trim()
+                    if (localPort == null || remotePort == null || host.isEmpty()) {
+                        Toast.makeText(this@MainActivity, R.string.tunnel_bad_port, Toast.LENGTH_SHORT).show()
+                        return@setOnClickListener
+                    }
+                    scope.launch {
+                        try {
+                            c.startTunnel(localPort, host, remotePort)
+                            localInput.setText("")
+                            remoteInput.setText("")
+                            refreshList()
+                        } catch (e: Exception) {
+                            Toast.makeText(this@MainActivity, getString(R.string.connect_failed, e.message ?: ""), Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            })
+        }
+        AlertDialog.Builder(this).setTitle(R.string.tunnel).setView(ScrollView(this).apply { addView(ll) })
+            .setNegativeButton(R.string.close, null)
             .show()
     }
 
@@ -623,6 +799,10 @@ class MainActivity : Activity(), ClientListener {
     override fun onVideoTrack(track: VideoTrack) {
         pendingTrack = track
         runOnUiThread { screenView?.attach(track) }
+    }
+
+    override fun onWhiteboard(data: JSONObject?) = runOnUiThread {
+        screenView?.applyRemoteWhiteboard(data)
     }
 }
 

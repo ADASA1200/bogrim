@@ -4,10 +4,13 @@
 
     <!-- מסך חיבור -->
     <string name="connect_title">חיבור למחשב מרוחק</string>
+    <string name="hint_invite">קישור הזמנה (אופציונלי - דילוג על כל השדות למטה)</string>
     <string name="hint_id">מזהה (9 ספרות)</string>
     <string name="hint_password">סיסמה (אופציונלי)</string>
+    <string name="hint_totp">קוד אימות דו-שלבי (רק אם המארח דורש)</string>
     <string name="pw_help">בלי סיסמה, המשתמש במחשב המרוחק יתבקש לאשר את החיבור.\nעם סיסמת גישה ללא נוכחות (אם הוגדרה שם), החיבור יתבצע בלי אישור.</string>
     <string name="hint_server">כתובת שרת האיתות</string>
+    <string name="invite_link_invalid">קישור הזמנה לא תקין</string>
     <string name="btn_connect">התחבר</string>
     <string name="recent">חיבורים אחרונים</string>
     <string name="history_btn">היסטוריית חיבורים</string>
@@ -17,8 +20,15 @@
     <string name="history_ongoing">מתבצע כעת</string>
     <string name="need_id">יש להזין את המזהה של המחשב המרוחק</string>
     <string name="connecting">מתחבר…</string>
+    <string name="connecting_invite">מתחבר עם קישור הזמנה…</string>
     <string name="waiting_approval">ממתין לאישור המשתמש במחשב המרוחק…</string>
     <string name="connect_failed">החיבור נכשל: %1$s</string>
+    <string name="wol_title">Wake-on-LAN (להעיר מחשב כבוי באותה רשת)</string>
+    <string name="wol_mac_hint">כתובת MAC של המחשב המרוחק</string>
+    <string name="wol_wake">העיר מחשב</string>
+    <string name="wol_sent">נשלח מגיק-פאקט להעיר את המחשב ברשת המקומית</string>
+    <string name="wol_no_mac">אין כתובת MAC שמורה למזהה הזה</string>
+    <string name="wol_bad_mac">כתובת MAC לא תקינה (לדוגמה: AA:BB:CC:DD:EE:FF)</string>
 
     <!-- סשן -->
     <string name="security_code">קוד אבטחה: %1$s</string>
@@ -68,5 +78,17 @@
     <string name="err_host_ended">המחשב המרוחק סיים את הסשן</string>
     <string name="err_lost">החיבור אבד</string>
     <string name="err_disconnected">התנתקת מהסשן</string>
+    <string name="err_bad_totp">קוד האימות הדו-שלבי שגוי או לא עדכני</string>
     <string name="err_generic">שגיאה: %1$s</string>
+
+    <!-- Whiteboard / TCP Tunneling -->
+    <string name="whiteboard">לוח ציור</string>
+    <string name="whiteboard_clear">נקה לוח</string>
+    <string name="tunnel">מעבר פורט (TCP)</string>
+    <string name="tunnel_local_port">פורט מקומי</string>
+    <string name="tunnel_remote_host">כתובת יעד (בצד המארח)</string>
+    <string name="tunnel_remote_port">פורט יעד</string>
+    <string name="tunnel_add">הוסף</string>
+    <string name="tunnel_bad_port">פורט לא תקין</string>
+    <string name="tunnel_close">סגור</string>
 </resources>

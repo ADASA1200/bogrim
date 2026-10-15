@@ -1,5 +1,7 @@
 package com.rdesk.viewer
 
+import java.net.URI
+import java.net.URLDecoder
 import java.security.MessageDigest
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -69,7 +71,26 @@ object Protocol {
         n = n.replace(Regex("[\\u0000-\\u001f<>:\"|?*]"), "_").trim('.', ' ')
         return n.ifEmpty { "file" }
     }
+
+    /** תואם בדיוק ל-rdesk/protocol.py::parse_invite_url - rdesk://connect/<id>/<token>?server=<url-encoded>. */
+    fun parseInviteUrl(url: String): InviteLink? {
+        val u = runCatching { URI(url.trim()) }.getOrNull() ?: return null
+        if (u.scheme != "rdesk" || u.host != "connect") return null
+        val parts = (u.path ?: "").split("/").filter { it.isNotEmpty() }
+        if (parts.size != 2) return null
+        val hostId = cleanId(parts[0])
+        val token = parts[1]
+        if (hostId.isEmpty() || token.isEmpty()) return null
+        val server = (u.query ?: "").split("&")
+            .map { it.split("=", limit = 2) }
+            .firstOrNull { it.getOrNull(0) == "server" }
+            ?.getOrNull(1)
+            ?.let { runCatching { URLDecoder.decode(it, "UTF-8") }.getOrNull() } ?: ""
+        return InviteLink(hostId, token, server)
+    }
 }
+
+data class InviteLink(val id: String, val token: String, val server: String)
 
 data class Perms(
     val control: Boolean = true,
