@@ -252,13 +252,13 @@ class HostService:
             self._fails = 0
             self._busy_negotiating = True
             try:
-                await self._accept_offer(peer, nonce, sdp, key, mode, invite_perms)
+                await self._accept_offer(peer, nonce, sdp, key, mode, invite_perms, from_ip)
             finally:
                 self._busy_negotiating = False
 
     # ------------------------------------------------------------ סשן
     async def _accept_offer(self, peer: str, nonce: str, sdp: str, key: bytes | None, mode: str,
-                             invite_perms: P.Permissions | None = None) -> None:
+                             invite_perms: P.Permissions | None = None, from_ip: str | None = None) -> None:
         trusted_perms = None if mode in ("unattended", "invite") or self.trust_check is None else self.trust_check(peer)
         if mode == "unattended":
             perms = P.Permissions(**self.unattended_perms.to_json())   # בלי אישור
@@ -267,7 +267,9 @@ class HostService:
         elif trusted_perms is not None:
             perms, mode = trusted_perms, "trusted"   # מזהה שסומן "זכור" בעבר - בלי אישור
         elif self.approval is not None:
-            perms = await self.approval({"peer": peer})
+            # כתובת ה-IP מוצגת בחלון האישור (כמו ב-AnyDesk) - אינדיקציה
+            # לזיהוי "זה נראה מוכר?" לפני שמאשרים שליטה במחשב.
+            perms = await self.approval({"peer": peer, "ip": from_ip})
         else:
             perms = P.Permissions()
         if perms is None:

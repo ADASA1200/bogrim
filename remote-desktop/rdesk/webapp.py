@@ -295,7 +295,7 @@ class HostAPI(_WindowPusher):
             self._window_visible = True
         if self.tray is not None:
             self.tray.set_connected(True, info.get("peer", ""))
-        self.push("ask_approval", {"requestId": req_id, "peer": info["peer"]})
+        self.push("ask_approval", {"requestId": req_id, "peer": info["peer"], "ip": info.get("ip")})
         try:
             result = await asyncio.wait_for(fut, APPROVAL_TIMEOUT)
         except asyncio.TimeoutError:

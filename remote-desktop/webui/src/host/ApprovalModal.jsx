@@ -27,7 +27,13 @@ export function ApprovalModal({ info, onDone }) {
   return (
     <Modal title="בקשת חיבור" onClose={() => respond(null)}>
       <p>
-        מישהו מבקש להתחבר למחשב שלך (מזהה <span className="ltr">{info.peer}</span>). לאפשר?
+        מישהו מבקש להתחבר למחשב שלך (מזהה <span className="ltr">{info.peer}</span>
+        {info.ip && (
+          <>
+            {" "}מכתובת <span className="ltr">{info.ip}</span>
+          </>
+        )}
+        ). לאפשר?
       </p>
       <div className="mt-2" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <Checkbox label="אפשר שליטה (עכבר ומקלדת)" checked={control} onChange={(e) => setControl(e.target.checked)} />
