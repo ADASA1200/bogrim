@@ -39,10 +39,13 @@ def make_rtc_config(stun: list[str] | None = None, turn: dict | None = None) -> 
 
 
 class Session:
-    def __init__(self, peer: str, pc: RTCPeerConnection, perms: P.Permissions) -> None:
+    def __init__(self, peer: str, pc: RTCPeerConnection, perms: P.Permissions,
+                 username: str | None = None, computer: str | None = None) -> None:
         self.peer = peer
         self.pc = pc
         self.perms = perms
+        self.username = username
+        self.computer = computer
         self.control = None
         self.files: FileTransfer | None = None
         self.tunnel: "TunnelHost | None" = None
@@ -214,6 +217,10 @@ class HostService:
             sdp = str(p.get("sdp", ""))
             tag = p.get("auth")
             invite_token = p.get("invite")
+            # מדווח-עצמי מהצד המתחבר (כמו ב-AnyDesk) - לא מאומת, רק אינדיקציה
+            # נוספת בבקשת החיבור, לצד ה-IP.
+            viewer_username = p.get("username") or None
+            viewer_computer = p.get("computer") or None
             # נבדק/נצרך פעם אחת כאן (חד-פעמי) - התוצאה מועברת ל-_accept_offer
             invite_perms = self.invite_check(invite_token) if invite_token and self.invite_check else None
             key, mode = None, "interactive"
@@ -252,13 +259,15 @@ class HostService:
             self._fails = 0
             self._busy_negotiating = True
             try:
-                await self._accept_offer(peer, nonce, sdp, key, mode, invite_perms, from_ip)
+                await self._accept_offer(peer, nonce, sdp, key, mode, invite_perms, from_ip,
+                                          viewer_username, viewer_computer)
             finally:
                 self._busy_negotiating = False
 
     # ------------------------------------------------------------ סשן
     async def _accept_offer(self, peer: str, nonce: str, sdp: str, key: bytes | None, mode: str,
-                             invite_perms: P.Permissions | None = None, from_ip: str | None = None) -> None:
+                             invite_perms: P.Permissions | None = None, from_ip: str | None = None,
+                             viewer_username: str | None = None, viewer_computer: str | None = None) -> None:
         trusted_perms = None if mode in ("unattended", "invite") or self.trust_check is None else self.trust_check(peer)
         if mode == "unattended":
             perms = P.Permissions(**self.unattended_perms.to_json())   # בלי אישור
@@ -267,9 +276,12 @@ class HostService:
         elif trusted_perms is not None:
             perms, mode = trusted_perms, "trusted"   # מזהה שסומן "זכור" בעבר - בלי אישור
         elif self.approval is not None:
-            # כתובת ה-IP מוצגת בחלון האישור (כמו ב-AnyDesk) - אינדיקציה
-            # לזיהוי "זה נראה מוכר?" לפני שמאשרים שליטה במחשב.
-            perms = await self.approval({"peer": peer, "ip": from_ip})
+            # כתובת ה-IP, שם המשתמש ושם המחשב מוצגים בחלון האישור (כמו
+            # ב-AnyDesk) - אינדיקציה לזיהוי "זה נראה מוכר?" לפני שמאשרים
+            # שליטה במחשב.
+            perms = await self.approval({
+                "peer": peer, "ip": from_ip, "username": viewer_username, "computer": viewer_computer,
+            })
         else:
             perms = P.Permissions()
         if perms is None:
@@ -284,7 +296,7 @@ class HostService:
         self._declines = 0
 
         pc = RTCPeerConnection(self.rtc_config)
-        sess = Session(peer, pc, perms)
+        sess = Session(peer, pc, perms, username=viewer_username, computer=viewer_computer)
         track = ScreenTrack(self.screen)
         await track.refresh_monitors()
         pc.addTrack(track)
@@ -328,7 +340,7 @@ class HostService:
             "auth": P.auth_tag(key, nonce, "host", answer) if key else None,
         })
         self.on_event("session_start", peer=peer, perms=perms.to_json(), mode=mode,
-                      code=P.session_code(sdp, answer))
+                      code=P.session_code(sdp, answer), username=sess.username, computer=sess.computer)
 
     async def _on_control_open(self, sess: Session) -> None:
         mons = await sess.track.refresh_monitors()

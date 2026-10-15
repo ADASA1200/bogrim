@@ -35,6 +35,21 @@ export function ApprovalModal({ info, onDone }) {
         )}
         ). לאפשר?
       </p>
+      {(info.username || info.computer) && (
+        <p className="text-faint">
+          {info.username && (
+            <>
+              משתמש: <span className="ltr">{info.username}</span>
+            </>
+          )}
+          {info.username && info.computer && " · "}
+          {info.computer && (
+            <>
+              מחשב: <span className="ltr">{info.computer}</span>
+            </>
+          )}
+        </p>
+      )}
       <div className="mt-2" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <Checkbox label="אפשר שליטה (עכבר ומקלדת)" checked={control} onChange={(e) => setControl(e.target.checked)} />
         <Checkbox label="אפשר סנכרון לוח" checked={clipboard} onChange={(e) => setClipboard(e.target.checked)} />

@@ -78,6 +78,21 @@ export function MainTab({ state, setState }) {
             {state.online ? "מחובר לשרת - מוכן לקבל חיבורים" : "אין חיבור לשרת, מנסה שוב..."}
           </Pill>
         </div>
+        {(state.username || state.computer) && (
+          <p className="text-faint mt-1">
+            {state.username && (
+              <>
+                מחובר בתור <span className="ltr">{state.username}</span>
+              </>
+            )}
+            {state.username && state.computer && " · "}
+            {state.computer && (
+              <>
+                מחשב <span className="ltr">{state.computer}</span>
+              </>
+            )}
+          </p>
+        )}
         <p className="card-help">חיבור עם הסיסמה הזמנית דורש את אישורך בכל פעם.</p>
         <div className="mt-2">
           <Button variant="ghost" size="sm" loading={creatingInvite} onClick={makeInvite}>
@@ -191,6 +206,21 @@ function SessionPanel({ state, setState }) {
       {session.mode === "unattended" && <Pill tone="warn">גישה ללא נוכחות (ללא אישור)</Pill>}
       {session.mode === "trusted" && <Pill tone="success">מכשיר מהימן (אושר אוטומטית)</Pill>}
       {session.mode === "invite" && <Pill tone="success">התחבר עם קישור הזמנה</Pill>}
+      {(session.username || session.computer) && (
+        <p className="text-faint mt-1">
+          {session.username && (
+            <>
+              משתמש: <span className="ltr">{session.username}</span>
+            </>
+          )}
+          {session.username && session.computer && " · "}
+          {session.computer && (
+            <>
+              מחשב: <span className="ltr">{session.computer}</span>
+            </>
+          )}
+        </p>
+      )}
       <p className="text-faint mt-1">קוד אבטחה: {session.code}</p>
       <div className="row mt-2" style={{ gap: 16, flexWrap: "wrap" }}>
         <Checkbox label="קבצים" checked={session.perms.files} onChange={(e) => togglePerm("files", e.target.checked)} />

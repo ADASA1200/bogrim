@@ -29,6 +29,7 @@ export function ConnectScreen({ onConnected }) {
   const [recent, setRecent] = useState([]);
   const [wolMac, setWolMac] = useState("");
   const [waking, setWaking] = useState(false);
+  const [myIdentity, setMyIdentity] = useState(null);
 
   useEffect(() => {
     callApi("getViewerPreset").then((p) => {
@@ -38,6 +39,7 @@ export function ConnectScreen({ onConnected }) {
         if (p.password) setPassword(p.password);
         if (p.invite) setInvite(p.invite);
         setRecent(p.recent || []);
+        if (p.username || p.computer) setMyIdentity({ username: p.username, computer: p.computer });
         if (p.autoConnect) connect(p.id, p.password, p.server, p.invite);
       }
     });
@@ -132,6 +134,17 @@ export function ConnectScreen({ onConnected }) {
             <p className="card-help">
               בלי סיסמה - המשתמש במחשב המרוחק יתבקש לאשר את החיבור.
               עם סיסמת גישה ללא נוכחות (אם הוגדרה שם) - החיבור יתבצע בלי אישור.
+              {(myIdentity?.username || myIdentity?.computer) && (
+                <>
+                  {" "}שם המשתמש והמחשב שלכם (
+                  <span className="ltr">
+                    {myIdentity.username}
+                    {myIdentity.username && myIdentity.computer && "@"}
+                    {myIdentity.computer}
+                  </span>
+                  ) יוצגו למארח בבקשת החיבור.
+                </>
+              )}
             </p>
             <Field label="שרת">
               <Input dir="ltr" value={server} onChange={(e) => setServer(e.target.value)} />

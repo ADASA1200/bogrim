@@ -18,7 +18,7 @@ from pathlib import Path
 
 import webview
 
-from . import account_client, acl, config, connlog, embedded as E, printing, protocol as P, wol
+from . import account_client, acl, config, connlog, embedded as E, printing, protocol as P, sysinfo, wol
 from .aio import AsyncRunner
 from .clipboard import Clipboard
 from .host import HostService
@@ -105,6 +105,8 @@ class HostAPI(_WindowPusher):
         self._online = False
         self._session_mode: str | None = None
         self._session_code: str | None = None
+        self._session_username: str | None = None
+        self._session_computer: str | None = None
         self._started = False
         self.tray = None
         self._window_visible = True
@@ -256,12 +258,17 @@ class HostAPI(_WindowPusher):
             self.push("status", {"online": self._online})
         elif kind == "session_start":
             self._session_mode, self._session_code = kw["mode"], kw["code"]
-            self.push("session_start", {"peer": kw["peer"], "perms": kw["perms"], "mode": kw["mode"], "code": kw["code"]})
+            self._session_username, self._session_computer = kw.get("username"), kw.get("computer")
+            self.push("session_start", {
+                "peer": kw["peer"], "perms": kw["perms"], "mode": kw["mode"], "code": kw["code"],
+                "username": kw.get("username"), "computer": kw.get("computer"),
+            })
             if self.tray is not None:
                 self.tray.set_connected(True, kw.get("peer", ""))
             connlog.start_entry(kw["peer"], kw["mode"], kw["perms"])
         elif kind == "session_end":
             self._session_mode = self._session_code = None
+            self._session_username = self._session_computer = None
             self.push("session_end", {})
             self.push("privacy_changed", {"enabled": False})
             if self.tray is not None:
@@ -295,7 +302,10 @@ class HostAPI(_WindowPusher):
             self._window_visible = True
         if self.tray is not None:
             self.tray.set_connected(True, info.get("peer", ""))
-        self.push("ask_approval", {"requestId": req_id, "peer": info["peer"], "ip": info.get("ip")})
+        self.push("ask_approval", {
+            "requestId": req_id, "peer": info["peer"], "ip": info.get("ip"),
+            "username": info.get("username"), "computer": info.get("computer"),
+        })
         try:
             result = await asyncio.wait_for(fut, APPROVAL_TIMEOUT)
         except asyncio.TimeoutError:
@@ -311,11 +321,14 @@ class HostAPI(_WindowPusher):
     def getState(self):
         key, uperms = config.get_unattended(self.cfg)
         sess = self.service.session
+        identity = sysinfo.local_identity()
         return {
             "id": self.id,
             "online": self._online,
             "recent": self.cfg.get("recent", []),
             "server": self.server,
+            "username": identity["username"],
+            "computer": identity["computer"],
             "unattended": {"enabled": key is not None, "hasKey": key is not None,
                           "control": uperms.control, "clipboard": uperms.clipboard, "files": uperms.files,
                           "totpEnabled": config.get_totp_secret(self.cfg) is not None},
@@ -328,6 +341,7 @@ class HostAPI(_WindowPusher):
                 "peer": sess.peer, "perms": sess.perms.to_json(),
                 "mode": self._session_mode or "interactive",
                 "code": self._session_code or "",
+                "username": self._session_username, "computer": self._session_computer,
             },
         }
 
@@ -524,13 +538,14 @@ class ViewerAPI(_WindowPusher):
         להיצרך פעם אחת בלבד - אחרת כל ניתוק (גם יזום על ידי המשתמש עצמו)
         מפעיל הדק-מחדש אוטומטי אינסופי, ששולח למארח בקשת אישור חדשה שהוא
         לא ביקש."""
+        identity = sysinfo.local_identity()
         p = self.preset
         if p and p.get("autoConnect"):
             self.preset = {**p, "autoConnect": False}
         if p:
-            return p
+            return {**p, **identity}
         cfg = config.load()
-        return {"server": config.server_url(None), "recent": cfg.get("recent", [])}
+        return {"server": config.server_url(None), "recent": cfg.get("recent", []), **identity}
 
     def parseInviteLink(self, url: str) -> dict | None:
         return P.parse_invite_url(url)

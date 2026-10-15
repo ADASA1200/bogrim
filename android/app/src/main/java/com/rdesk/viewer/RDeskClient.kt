@@ -1,6 +1,8 @@
 package com.rdesk.viewer
 
 import android.content.Context
+import android.os.Build
+import android.provider.Settings
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -76,6 +78,14 @@ class RDeskClient(
             factory = f
             return f
         }
+
+        /** שם המכשיר (כמו "שם מחשב" בצד Windows) - מוצג למארח בבקשת חיבור,
+        בדיוק כמו ב-AnyDesk. בלי "שם משתמש" - לאנדרואיד אין מושג כזה
+        (בניגוד ל-Windows), אז זה שדה יחיד מתחת לשם computer בפרוטוקול. */
+        fun deviceName(ctx: Context): String =
+            runCatching { Settings.Global.getString(ctx.contentResolver, "device_name") }
+                .getOrNull()?.takeIf { it.isNotBlank() }
+                ?: "${Build.MANUFACTURER} ${Build.MODEL}".trim()
     }
 
     private var pc: PeerConnection? = null
@@ -182,6 +192,7 @@ class RDeskClient(
                 relay(
                     JSONObject().put("kind", "offer").put("sdp", offerSdp)
                         .put("auth", if (key != null) Protocol.authTag(key, nonce, "viewer", offerSdp) else JSONObject.NULL)
+                        .put("computer", deviceName(appContext))
                 )
 
                 val answer = nextPayload(inbox, 90_000)      // כולל המתנה לאישור המשתמש

@@ -32,7 +32,11 @@ export default function HostApp() {
       on("session_start", (d) =>
         setState((s) => ({
           ...s,
-          session: { peer: d.peer, perms: d.perms, mode: d.mode, code: d.code, chat: [], privacy: false, whiteboard: [] },
+          session: {
+            peer: d.peer, perms: d.perms, mode: d.mode, code: d.code,
+            username: d.username, computer: d.computer,
+            chat: [], privacy: false, whiteboard: [],
+          },
         }))
       ),
       on("session_end", () => setState((s) => ({ ...s, session: null }))),

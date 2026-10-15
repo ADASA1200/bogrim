@@ -10,7 +10,7 @@ from typing import Callable
 import websockets
 from aiortc import RTCConfiguration, RTCPeerConnection, RTCSessionDescription
 
-from . import config, protocol as P
+from . import config, protocol as P, sysinfo
 from .clipboard import Clipboard
 from .files import FileTransfer
 from .host import make_rtc_config
@@ -112,9 +112,11 @@ class ViewerClient:
 
             await pc.setLocalDescription(await pc.createOffer())
             sdp = pc.localDescription.sdp
+            me_info = sysinfo.local_identity()
             await send({"kind": "offer", "sdp": sdp,
                         "auth": P.auth_tag(key, nonce, "viewer", sdp) if key else None,
-                        "totp": totp or None, "invite": invite or None})
+                        "totp": totp or None, "invite": invite or None,
+                        "username": me_info["username"] or None, "computer": me_info["computer"] or None})
             ans = await self._next_payload(ws, timeout)   # ממתין גם לאישור המשתמש
         if ans.get("kind") == "reject":
             await pc.close()

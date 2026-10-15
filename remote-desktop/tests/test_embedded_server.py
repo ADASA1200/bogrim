@@ -157,12 +157,15 @@ async def test_ip_whitelist_allows_listed_ip(tmp_path):
 
 
 async def test_approval_callback_receives_connecting_ip(tmp_path):
-    """כמו ב-AnyDesk: חלון בקשת החיבור מציג גם את כתובת ה-IP שממנה מתחברים,
-    לא רק את המזהה - אינדיקציה נוספת לפני שמאשרים שליטה במחשב."""
+    """כמו ב-AnyDesk: חלון בקשת החיבור מציג גם את כתובת ה-IP, שם המשתמש
+    ושם המחשב שממנו מתחברים - לא רק את המזהה - אינדיקציה נוספת לפני
+    שמאשרים שליטה במחשב. גם מאמת שהפרטים האלה ממשיכים להיות זמינים
+    לאורך הסשן הפעיל (session_start), לא רק ברגע האישור החולף."""
     port = 18913
     srv = await embedded.start(port)
     try:
         seen = {}
+        events = []
 
         async def approve(info):
             seen.update(info)
@@ -171,7 +174,7 @@ async def test_approval_callback_receives_connecting_ip(tmp_path):
         host = HostService(
             f"ws://127.0.0.1:{port}", "333444556", screen=SyntheticScreen(), injector=NullInjector(),
             clipboard=MemoryClipboard(), approval=approve,
-            on_event=lambda k, **kw: None, download_dir=tmp_path / "recv", rtc_config=make_rtc_config([]),
+            on_event=lambda k, **kw: events.append((k, kw)), download_dir=tmp_path / "recv", rtc_config=make_rtc_config([]),
         )
         task = asyncio.ensure_future(host.run())
         await asyncio.wait_for(host.registered.wait(), 5)
@@ -180,6 +183,12 @@ async def test_approval_callback_receives_connecting_ip(tmp_path):
         await v.connect("333444556")
         assert v.connected
         assert seen.get("ip") == "127.0.0.1"
+        assert seen.get("username")   # getpass.getuser() - לא ריק בסביבת הבדיקה
+        assert seen.get("computer")   # socket.gethostname() - לא ריק בסביבת הבדיקה
+
+        start_kw = next(kw for k, kw in events if k == "session_start")
+        assert start_kw["username"] == seen["username"]
+        assert start_kw["computer"] == seen["computer"]
 
         await v.disconnect()
         await host.stop()

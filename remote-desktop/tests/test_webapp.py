@@ -92,6 +92,19 @@ async def test_get_state_shape(host_api):
     assert s["embedded"]["enabled"] is True
     assert s["session"] is None
     assert s["unattended"]["enabled"] is False
+    # "מחובר בתור X · מחשב Y" בכרטיס "המחשב הזה" - כמו "Logged in as" ב-AnyDesk
+    assert s["username"]
+    assert s["computer"]
+
+
+def test_viewer_preset_includes_local_identity(runner):
+    """ConnectScreen מציג למשתמש בשקיפות מה ישותף עם המארח ("שם המשתמש
+    והמחשב שלכם (X@Y) יוצגו למארח") - גם כש-preset לא הוגדר כלל (חיבור
+    ידני רגיל, לא דרך openViewer/invite-link)."""
+    viewer = webapp.ViewerAPI(runner, None)
+    p = viewer.getViewerPreset()
+    assert p["username"]
+    assert p["computer"]
 
 
 async def test_full_connect_approve_video_chat_disconnect(host_api, host_events, runner, tmp_path):
