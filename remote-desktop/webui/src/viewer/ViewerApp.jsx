@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { on } from "../bridge";
+import { ThemeToggle } from "../components/ui";
 import { ConnectScreen } from "./ConnectScreen";
 import { SessionScreen } from "./SessionScreen";
 
@@ -15,6 +16,11 @@ export default function ViewerApp() {
 
   return (
     <div className="app-shell">
+      {!connected && (
+        <div style={{ position: "fixed", top: 10, insetInlineStart: 10, zIndex: 40 }}>
+          <ThemeToggle />
+        </div>
+      )}
       {!connected ? (
         <ConnectScreen onConnected={setConnected} />
       ) : (

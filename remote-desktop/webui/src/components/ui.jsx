@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { callApi, copyToClipboard } from "../bridge";
+import { getTheme, setTheme } from "../theme.js";
 
 // לחיצה ימנית על כל שדה טקסט מדביקה ישירות, בלי תפריט - נוח יותר כשמעתיקים
 // מזהה/סיסמה/כתובת שרת. קוראים את הלוח דרך פייתון (פיברוך cross-platform;
@@ -64,6 +65,20 @@ export function IconButton({ children, title, ...rest }) {
   );
 }
 
+export function ThemeToggle() {
+  const [theme, setThemeState] = useState(getTheme());
+  function toggle() {
+    const next = theme === "light" ? "dark" : "light";
+    setTheme(next);
+    setThemeState(next);
+  }
+  return (
+    <IconButton title={theme === "light" ? "מעבר לערכה כהה" : "מעבר לערכה בהירה"} onClick={toggle}>
+      {theme === "light" ? "☾" : "☀"}
+    </IconButton>
+  );
+}
+
 export function CopyButton({ text, title = "העתק", disabled }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -119,18 +134,21 @@ export function Pill({ tone = "muted", children }) {
   );
 }
 
-export function Tabs({ tabs, value, onChange }) {
+export function Tabs({ tabs, value, onChange, right }) {
   return (
-    <div className="tabbar">
-      {tabs.map((t) => (
-        <div
-          key={t.key}
-          className={`tab ${value === t.key ? "active" : ""}`}
-          onClick={() => onChange(t.key)}
-        >
-          {t.label}
-        </div>
-      ))}
+    <div className="tabbar" style={right ? { justifyContent: "space-between" } : undefined}>
+      <div style={{ display: "flex", gap: 4 }}>
+        {tabs.map((t) => (
+          <div
+            key={t.key}
+            className={`tab ${value === t.key ? "active" : ""}`}
+            onClick={() => onChange(t.key)}
+          >
+            {t.label}
+          </div>
+        ))}
+      </div>
+      {right && <div style={{ paddingBottom: 6 }}>{right}</div>}
     </div>
   );
 }

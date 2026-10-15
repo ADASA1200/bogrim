@@ -30,6 +30,42 @@
   --font-mono: "Cascadia Mono", "Consolas", ui-monospace, monospace;
 }
 
+/* ערכת נושא בהירה - ברירת המחדל (data-theme נקבע ע"י theme.js לפני ה-render
+   הראשון, כדי למנוע הבהוב של הערכה הכהה). כל שאר ה-CSS בקובץ הזה כבר בנוי
+   על משתני --bg/--fg/וכו', אז דריסה כאן מספיקה - אין צורך לגעת בשום מקום אחר. */
+:root[data-theme="light"] {
+  --bg: #f4f5f8;
+  --bg-elev-1: #ffffff;
+  --bg-elev-2: #eef0f4;
+  --bg-elev-3: #e2e5eb;
+  --border: #d9dce3;
+  --border-soft: #e7e9ee;
+  --fg: #1a1d24;
+  --fg-muted: #5c6577;
+  --fg-faint: #8a93a6;
+  --accent: #2f6fed;
+  --accent-hover: #1f5bd6;
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(47, 111, 237, 0.1);
+  --success: #15995f;
+  --success-soft: rgba(21, 153, 95, 0.12);
+  --danger: #d8303f;
+  --danger-soft: rgba(216, 48, 63, 0.1);
+  --warn: #b5760f;
+  --warn-soft: rgba(181, 118, 15, 0.12);
+  --shadow-1: 0 1px 2px rgba(20, 24, 33, 0.06);
+  --shadow-2: 0 8px 24px rgba(20, 24, 33, 0.12);
+}
+
+:root[data-theme="light"] .app-shell {
+  background:
+    radial-gradient(1200px 500px at 50% -10%, rgba(47, 111, 237, 0.06), transparent 60%),
+    var(--bg);
+}
+
+:root[data-theme="light"] ::-webkit-scrollbar-thumb { background: #d2d6dd; }
+:root[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #bbc0ca; }
+
 * { box-sizing: border-box; }
 
 html, body, #root { height: 100%; }

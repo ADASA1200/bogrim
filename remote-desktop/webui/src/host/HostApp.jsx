@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { callApi, on } from "../bridge";
 import { Tabs } from "../components/ui";
 import { pushToast } from "../components/ui";
-import { Modal, Button } from "../components/ui";
+import { Modal, Button, ThemeToggle } from "../components/ui";
 import { MainTab } from "./MainTab";
 import { SettingsTab } from "./SettingsTab";
 import { HistoryTab } from "./HistoryTab";
@@ -102,6 +102,7 @@ export default function HostApp() {
           { key: "history", label: "יומן" },
           { key: "settings", label: "הגדרות" },
         ]}
+        right={<ThemeToggle />}
       />
       <div className="scroll-area">
         {tab === "main" && <MainTab state={state} setState={setState} />}
