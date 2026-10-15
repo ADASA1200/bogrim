@@ -429,6 +429,25 @@ def test_open_viewer_allows_connecting_to_this_computer_itself(host_api, monkeyp
     assert host_api.id in webapp.config.load()["recent"]
 
 
+def test_viewer_preset_autoconnect_is_consumed_once(runner):
+    """רגרסיה: viewer window שנפתח עם autoConnect=True (openViewer, invite
+    link) וחוזר למסך ההתחברות אחרי ניתוק (ConnectScreen נטען מחדש) לא אמור
+    להתחבר-מחדש אוטומטית בלי שהמשתמש ביקש - זה היה שולח למארח בקשת אישור
+    חדשה בכל פעם שסשן הסתיים, אפילו ניתוק יזום."""
+    preset = {"server": "ws://127.0.0.1:8765", "id": "111222333", "password": "", "autoConnect": True}
+    viewer = webapp.ViewerAPI(runner, preset)
+
+    first = viewer.getViewerPreset()
+    assert first["autoConnect"] is True
+
+    second = viewer.getViewerPreset()
+    assert second["autoConnect"] is False
+    assert second["id"] == "111222333"   # שאר השדות נשארים זמינים למילוי השדות מחדש
+
+    third = viewer.getViewerPreset()
+    assert third["autoConnect"] is False
+
+
 def test_parse_invite_link_via_viewer_api(runner):
     viewer = webapp.ViewerAPI(runner, None)
     url = P.make_invite_url("135791357", "tok", "ws://127.0.0.1:8765")

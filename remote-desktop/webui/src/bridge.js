@@ -35,8 +35,6 @@ export function whenReady() {
   return readyPromise;
 }
 
-const DEV_MOCK = !window.pywebview;
-
 async function mockCall(method, args) {
   console.debug("[mock api]", method, args);
   const mocks = {
@@ -71,8 +69,14 @@ async function mockCall(method, args) {
 }
 
 export async function callApi(method, ...args) {
-  if (DEV_MOCK) return mockCall(method, args);
+  // קריטי: קודם מחכים (עד שהאירוע pywebviewready יורה, או 300ms fallback),
+  // ורק *אחרי* זה בודקים אם ה-API האמיתי קיים. לפני התיקון הזה הבדיקה
+  // (window.pywebview?) התבצעה פעם אחת, בזמן טעינת המודול - לפני ש-pywebview
+  // הספיק להזריק את window.pywebview (זה תמיד קורה אחרי שה-JS bundle כבר
+  // רץ) - כך שבפועל כל קריאות ה-API תמיד נפלו ל-mock, גם בתוך האפליקציה
+  // האמיתית, לא רק במצב הפיתוח (npm run dev) שבגללו ה-fallback הזה קיים.
   await whenReady();
+  if (!window.pywebview?.api) return mockCall(method, args);
   const fn = window.pywebview.api[method];
   if (!fn) throw new Error(`API method not found: ${method}`);
   return fn(...args);

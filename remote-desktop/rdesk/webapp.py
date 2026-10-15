@@ -518,8 +518,17 @@ class ViewerAPI(_WindowPusher):
         self._pump_task = None
 
     def getViewerPreset(self):
-        if self.preset:
-            return self.preset
+        """ConnectScreen קורא לזה בכל טעינה שלו - כולל חזרה אליו אחרי ניתוק
+        (ראו ViewerApp.jsx: אירוע "closed" מחזיר ל-ConnectScreen, שה-useEffect
+        שלו קורא ל-getViewerPreset מההתחלה). preset עם autoConnect=True חייב
+        להיצרך פעם אחת בלבד - אחרת כל ניתוק (גם יזום על ידי המשתמש עצמו)
+        מפעיל הדק-מחדש אוטומטי אינסופי, ששולח למארח בקשת אישור חדשה שהוא
+        לא ביקש."""
+        p = self.preset
+        if p and p.get("autoConnect"):
+            self.preset = {**p, "autoConnect": False}
+        if p:
+            return p
         cfg = config.load()
         return {"server": config.server_url(None), "recent": cfg.get("recent", [])}
 
