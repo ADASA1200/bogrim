@@ -91,4 +91,26 @@
     <string name="tunnel_add">הוסף</string>
     <string name="tunnel_bad_port">פורט לא תקין</string>
     <string name="tunnel_close">סגור</string>
+
+    <!-- מצב מארח (הטלפון מקבל חיבורים נכנסים) -->
+    <string name="host_mode">מצב מארח</string>
+    <string name="host_mode_title">הטלפון הזה כמארח</string>
+    <string name="host_mode_help">מאפשר למחשב (או לטלפון אחר) להתחבר *לטלפון הזה* ולראות/לשלוט בו - בדיוק כמו ב-AnyDesk. דורש הפעלה חד-פעמית של שירות נגישות.</string>
+    <string name="host_mode_id">המזהה של הטלפון הזה</string>
+    <string name="host_mode_start">הפעל מצב מארח</string>
+    <string name="host_mode_stop">כבה מצב מארח</string>
+    <string name="host_mode_active">מצב מארח פעיל - ממתין לחיבורים</string>
+    <string name="host_mode_inactive">מצב מארח כבוי</string>
+    <string name="accessibility_service_desc">נדרש כדי שמחשב שמתחבר יוכל לשלוט בטלפון מרחוק (הקשות, גרירות, הקלדה) - רק בזמן שמצב מארח פעיל ומישהו מאושר מחובר.</string>
+    <string name="accessibility_not_enabled">יש להפעיל את שירות הנגישות של RDesk בהגדרות המכשיר כדי לאפשר שליטה מרחוק</string>
+    <string name="accessibility_open_settings">פתח הגדרות נגישות</string>
+    <string name="screen_capture_denied">אישור שיתוף המסך נדחה - מצב מארח לא יכול לפעול בלעדיו</string>
+    <string name="host_notification_title">RDesk - מצב מארח פעיל</string>
+    <string name="host_notification_text">מזהה: %1$s</string>
+    <string name="host_notification_connected">מחובר: %1$s</string>
+    <string name="host_approval_title">בקשת חיבור</string>
+    <string name="host_approval_message">מישהו מבקש להתחבר לטלפון הזה (מזהה %1$s). לאפשר?</string>
+    <string name="host_approval_allow_control">אפשר שליטה (מגע והקלדה)</string>
+    <string name="host_approval_approve">אשר</string>
+    <string name="host_approval_decline">דחה</string>
 </resources>

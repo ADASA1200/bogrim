@@ -1,5 +1,6 @@
 package com.rdesk.viewer
 
+import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ClipData
@@ -7,11 +8,15 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.provider.Settings
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
@@ -48,6 +53,8 @@ class MainActivity : Activity(), ClientListener {
 
     companion object {
         private const val REQ_FILE = 42
+        private const val REQ_SCREEN_CAPTURE = 44
+        private const val REQ_NOTIF_PERM = 45
         private const val PREF_SERVER = "server"
         private const val PREF_RECENT = "recent"
     }
@@ -71,6 +78,11 @@ class MainActivity : Activity(), ClientListener {
     private lateinit var wolBtn: Button
     private var pendingInviteToken: String? = null
     private var invitePasting = false
+
+    // מצב מארח (הטלפון הזה מקבל חיבורים נכנסים)
+    private lateinit var hostIdText: TextView
+    private lateinit var hostToggleBtn: Button
+    private lateinit var hostStatusText: TextView
 
     // סשן
     private var client: RDeskClient? = null
@@ -113,6 +125,11 @@ class MainActivity : Activity(), ClientListener {
         client?.disconnect()
         scope.cancel()
         super.onDestroy()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (sessionScreen == null) refreshHostModeUi()
     }
 
     @Deprecated("Deprecated in Java")
@@ -190,6 +207,8 @@ class MainActivity : Activity(), ClientListener {
 
         col.addView(spacer(16))
         col.addView(buildWolSection())
+        col.addView(spacer(16))
+        col.addView(buildHostModeSection())
         connectScreen = ScrollView(this).apply {
             isFillViewport = true
             setBackgroundColor(resources.getColor(R.color.bg, theme))
@@ -237,6 +256,73 @@ class MainActivity : Activity(), ClientListener {
             }
         })
         return box
+    }
+
+    private fun buildHostModeSection(): View {
+        val box = card()
+        box.addView(TextView(this).apply {
+            setText(R.string.host_mode_title)
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(resources.getColor(R.color.fg, theme))
+            textSize = 15f
+        })
+        box.addView(TextView(this).apply {
+            setText(R.string.host_mode_help)
+            setTextColor(resources.getColor(R.color.fg_faint, theme))
+            textSize = 12.5f
+            setPadding(0, dp(6), 0, dp(10))
+        })
+        hostIdText = TextView(this).apply {
+            textSize = 20f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(resources.getColor(R.color.fg, theme))
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            gravity = Gravity.CENTER
+        }
+        box.addView(hostIdText, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
+        hostStatusText = TextView(this).apply {
+            textSize = 12.5f
+            gravity = Gravity.CENTER
+            setPadding(0, dp(4), 0, dp(10))
+        }
+        box.addView(hostStatusText)
+        hostToggleBtn = primaryButton(R.string.host_mode_start) { toggleHostMode() }
+        box.addView(hostToggleBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+        return box
+    }
+
+    private fun refreshHostModeUi() {
+        hostIdText.text = Protocol.formatId(HostIdentity.get(prefs))
+        val running = RDeskHostService.isRunning
+        hostToggleBtn.setText(if (running) R.string.host_mode_stop else R.string.host_mode_start)
+        hostStatusText.setText(if (running) R.string.host_mode_active else R.string.host_mode_inactive)
+        hostStatusText.setTextColor(resources.getColor(if (running) R.color.success else R.color.fg_faint, theme))
+    }
+
+    private fun toggleHostMode() {
+        if (RDeskHostService.isRunning) {
+            startService(Intent(this, RDeskHostService::class.java).setAction(RDeskHostService.ACTION_STOP))
+            refreshHostModeUi()
+            return
+        }
+        if (!RDeskAccessibilityService.isEnabled(this)) {
+            AlertDialog.Builder(this)
+                .setMessage(R.string.accessibility_not_enabled)
+                .setPositiveButton(R.string.accessibility_open_settings) { _, _ ->
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                }
+                .setNegativeButton(R.string.close, null)
+                .show()
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            // לא חוסמים על זה - גם בלי ההרשאה השירות ממשיך לרוץ, רק ההתראה לא תוצג
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIF_PERM)
+        }
+        val mgr = getSystemService(MediaProjectionManager::class.java)
+        startActivityForResult(mgr.createScreenCaptureIntent(), REQ_SCREEN_CAPTURE)
     }
 
     private fun wakeOnLan() {
@@ -610,6 +696,19 @@ class MainActivity : Activity(), ClientListener {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_SCREEN_CAPTURE) {
+            if (resultCode == RESULT_OK && data != null) {
+                val intent = Intent(this, RDeskHostService::class.java)
+                    .setAction(RDeskHostService.ACTION_START)
+                    .putExtra(RDeskHostService.EXTRA_RESULT_CODE, resultCode)
+                    .putExtra(RDeskHostService.EXTRA_RESULT_DATA, data)
+                if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent) else startService(intent)
+            } else {
+                Toast.makeText(this, R.string.screen_capture_denied, Toast.LENGTH_LONG).show()
+            }
+            refreshHostModeUi()
+            return
+        }
         val uri: Uri = data?.data ?: return
         if (requestCode != REQ_FILE || resultCode != RESULT_OK) return
         var name = "file"

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- נדרש כדי שנוכל להזריק מגע/טקסט מרחוק (מצב מארח) - המשתמש חייב להפעיל
+     את זה ידנית בהגדרות הנגישות של אנדרואיד; אי אפשר להעניק את ההרשאה
+     הזו פרוגרמטית, מטעמי אבטחה של המערכת. -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeViewFocused"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagRetrieveInteractiveWindows|flagReportViewIds"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/accessibility_service_desc"
+    android:notificationTimeout="100" />
