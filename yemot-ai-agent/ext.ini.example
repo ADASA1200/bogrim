@@ -1,0 +1,5 @@
+type=api
+api_link=https://YOUR-HOST.duckdns.org/yemot
+api_url_post=yes
+api_add_0=k=PUT_URL_SECRET_HERE
+api_wait_answer_music_on_hold=yes
