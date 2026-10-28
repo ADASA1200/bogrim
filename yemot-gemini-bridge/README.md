@@ -37,6 +37,16 @@ set -a; . ./.env; set +a; ./venv/bin/python -m bridge.main
 
 להרצה קבועה בלי Docker יש קובץ `deploy/yemot-gemini-bridge.service` ל־systemd.
 
+## התקנה על שרת Oracle (Ubuntu 24.04, ARM או x86)
+
+```bash
+cd ~/bogrim/yemot-gemini-bridge        # אחרי git clone או scp של התיקייה
+bash deploy/oracle_ubuntu_setup.sh
+```
+
+הסקריפט מתקין שירות systemd חדש בשם `yemot-gemini-bridge` ב־`/opt/yemot-gemini-bridge`, שואל אותך על ה־IP הציבורי ועל מפתח Gemini (ההקלדה מוסתרת), יוצר `ACCESS_TOKEN`, ופותח בחומת האש של המכונה רק את פורטי ה־UDP של SIP ו־RTP (עם גיבוי של הכללים הקיימים). הוא לא נוגע בשירותים אחרים שרצים על השרת.
+את חוקי הכניסה ב־Oracle Console (Security List של ה־VCN) צריך להוסיף ידנית: UDP לפורט 5060 ולטווח 10000–10199.
+
 ## הגדרה בימות המשיח
 
 ### דרך א׳ (מומלצת): ניתוב שיחה ל־IP — `type=routing_ip`
