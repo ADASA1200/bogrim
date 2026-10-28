@@ -79,6 +79,8 @@ async def run(argv: list[str]) -> int:
     ap.add_argument("--api-base", default=DEFAULT_API)
     ap.add_argument("--dial-timeout", type=int, default=30, help="sip_timeout for the extension, seconds")
     ap.add_argument("--no-extension", action="store_true", help="only create/reuse the account")
+    ap.add_argument("--use-existing", action="store_true",
+                    help="allow turning an extension that already exists into the Gemini line (changes its type)")
     args = ap.parse_args(argv)
 
     token = os.environ.get("YEMOT_API_TOKEN") or getpass.getpass("Yemot API token (hidden): ")
@@ -90,6 +92,16 @@ async def run(argv: list[str]) -> int:
     timeout = aiohttp.ClientTimeout(total=30)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         try:
+            if not args.no_extension:
+                found = await api(session, args.api_base, token, "CheckIfFileExists", path=f"{path}/ext.ini")
+                if found.get("fileExists"):
+                    if not args.use_existing:
+                        print(f"STOPPED: extension {path} already exists. Pick another number, or add --use-existing "
+                              "to change that extension into the Gemini line (its type is replaced).")
+                        return 3
+                    print(f"Extension {path} exists; --use-existing given, its type will be changed to sip.")
+                else:
+                    print(f"Extension {path} does not exist yet; it will be created.")
             listing = await api(session, args.api_base, token, "GetSipAccountsInCustomer")
             accounts = listing.get("accounts", [])
             if args.use_account:

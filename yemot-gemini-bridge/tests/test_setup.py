@@ -9,7 +9,8 @@ from bridge import yemot_setup
 
 
 class MockYemot:
-    def __init__(self, existing=None, fail=None):
+    def __init__(self, existing=None, fail=None, extensions=()):
+        self.extensions = set(extensions)
         self.calls = []
         self.accounts = list(existing or [])
         self.fail = fail
@@ -20,6 +21,9 @@ class MockYemot:
         self.calls.append((cmd, body, req.headers.get("authorization"), dict(req.query)))
         if req.headers.get("authorization") != "good-token" or cmd == self.fail:
             return web.json_response({"responseStatus": "ERROR", "message": "denied", "messageCode": 7})
+        if cmd == "CheckIfFileExists":
+            return web.json_response({"responseStatus": "OK", "path": body["path"],
+                                      "fileExists": body["path"] in {f"ivr2:{e}/ext.ini" for e in self.extensions}})
         if cmd == "GetSipAccountsInCustomer":
             return web.json_response({"responseStatus": "OK", "accounts": self.accounts, "accountLimit": 6})
         if cmd == "CreateSipAccount":
@@ -56,8 +60,9 @@ async def test_creates_account_configures_extension_and_writes_env(tmp_path, mon
         await runner.cleanup()
     assert rc == 0
     cmds = [c[0] for c in mock.calls]
-    assert cmds == ["GetSipAccountsInCustomer", "CreateSipAccount", "SipToUdp", "UpdateExtension"]
-    ext = mock.calls[3][1]
+    assert cmds == ["CheckIfFileExists", "GetSipAccountsInCustomer", "CreateSipAccount", "SipToUdp", "UpdateExtension"]
+    assert mock.calls[0][1]["path"] == "ivr2:5/ext.ini"
+    ext = mock.calls[4][1]
     assert ext["path"] == "ivr2:5" and ext["type"] == "sip" and ext["account_dial_number"] == 2
     assert all(c[2] == "good-token" and not c[3] for c in mock.calls)  # token only in the header, never in the URL
     text = env.read_text()
@@ -95,7 +100,7 @@ async def test_api_error_aborts_without_touching_env(tmp_path, monkeypatch, caps
     finally:
         await runner.cleanup()
     assert rc == 1 and not env.exists()
-    assert "FAILED: GetSipAccountsInCustomer: ERROR denied" in capsys.readouterr().out
+    assert "FAILED: CheckIfFileExists: ERROR denied" in capsys.readouterr().out
     assert len(mock.calls) == 1  # stops at the first failure
 
 
@@ -119,3 +124,36 @@ async def test_use_account_picks_a_specific_existing_account(tmp_path, monkeypat
     assert "YEMOT_REGISTER_HOST=sip.yemot.co.il" in text
     assert [c[1] for c in mock.calls if c[0] == "UpdateExtension"][0]["account_dial_number"] == 1
     assert rc_missing == 1 and "no SIP account 'nope'" in capsys.readouterr().out
+
+
+async def test_extension_1522_is_created_when_missing(tmp_path, monkeypatch, capsys):
+    mock = MockYemot()
+    runner, base = await start(mock)
+    monkeypatch.setenv("YEMOT_API_TOKEN", "good-token")
+    try:
+        rc = await yemot_setup.run(["--extension", "1522", "--use-account", "x", "--env", str(tmp_path / ".env"),
+                                    "--api-base", base])
+        assert rc == 1  # account 'x' does not exist -> clean failure, nothing created
+        assert "UpdateExtension" not in [c[0] for c in mock.calls]
+        rc = await yemot_setup.run(["--extension", "1522", "--env", str(tmp_path / ".env"), "--api-base", base])
+    finally:
+        await runner.cleanup()
+    assert rc == 0
+    assert "does not exist yet; it will be created" in capsys.readouterr().out
+    upd = [c[1] for c in mock.calls if c[0] == "UpdateExtension"][0]
+    assert upd["path"] == "ivr2:1522" and upd["type"] == "sip"
+
+
+async def test_existing_extension_is_not_overwritten_without_flag(tmp_path, monkeypatch, capsys):
+    mock = MockYemot(extensions={"1522"})
+    runner, base = await start(mock)
+    env = tmp_path / ".env"
+    monkeypatch.setenv("YEMOT_API_TOKEN", "good-token")
+    try:
+        rc = await yemot_setup.run(["--extension", "1522", "--env", str(env), "--api-base", base])
+        assert rc == 3 and "already exists" in capsys.readouterr().out
+        assert [c[0] for c in mock.calls] == ["CheckIfFileExists"] and not env.exists()  # nothing changed
+        rc = await yemot_setup.run(["--extension", "1522", "--use-existing", "--env", str(env), "--api-base", base])
+    finally:
+        await runner.cleanup()
+    assert rc == 0 and "UpdateExtension" in [c[0] for c in mock.calls]
