@@ -107,7 +107,7 @@ Then, from ANOTHER computer (checks the ports; the second line is a test call fo
   python3 -m bridge.probe $PUBLIC_IP --token <ACCESS_TOKEN>
 
 Yemot, option A (recommended) - extension type=sip with a registered SIP account:
-  sudo $APP/venv/bin/python -m bridge.yemot_setup --extension 5 --host <SIP server from the site's
+  cd $APP && sudo ./venv/bin/python -m bridge.yemot_setup --extension 5 --host <SIP server from the site's
       business-switchboard tab> --env $APP/.env
   sudo systemctl restart $SVC        # then look for "registered with ..." in the log
 

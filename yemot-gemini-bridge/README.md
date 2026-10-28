@@ -61,7 +61,8 @@ bash deploy/oracle_ubuntu_setup.sh
 **הגדרה אוטומטית** (על השרת, אחרי ההתקנה):
 
 ```bash
-sudo /opt/yemot-gemini-bridge/venv/bin/python -m bridge.yemot_setup \
+cd /opt/yemot-gemini-bridge
+sudo ./venv/bin/python -m bridge.yemot_setup \
     --extension 5 --host <כתובת שרת ה-SIP> --env /opt/yemot-gemini-bridge/.env
 sudo systemctl restart yemot-gemini-bridge
 sudo journalctl -u yemot-gemini-bridge -f      # מחפשים: registered with ... as ...
