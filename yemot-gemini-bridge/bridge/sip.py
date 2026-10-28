@@ -235,6 +235,7 @@ class SipEndpoint(asyncio.DatagramProtocol):
         self._invite_tx: dict[tuple[str, int], dict] = {}
         self._pending: dict[str, Invite] = {}
         self._waiters: dict[tuple[str, int], asyncio.Future] = {}
+        self.response_sources: set[str] = set()
         self._tasks: set[asyncio.Task] = set()
 
     # ---- lifecycle -----------------------------------------------------
@@ -282,12 +283,13 @@ class SipEndpoint(asyncio.DatagramProtocol):
         if msg.is_request:
             self._spawn(self._on_request(msg, addr))
         else:
-            self._on_response(msg)
+            self._on_response(msg, addr)
 
-    def _on_response(self, msg: SipMessage) -> None:
+    def _on_response(self, msg: SipMessage, addr: tuple[str, int]) -> None:
         num, _ = msg.cseq
         fut = self._waiters.get((msg.call_id, num))
         if fut and not fut.done() and (msg.status or 0) >= 200:
+            self.response_sources.add(addr[0])  # addresses that really answered our requests
             fut.set_result(msg)
 
     async def _on_request(self, msg: SipMessage, addr: tuple[str, int]) -> None:
@@ -579,15 +581,25 @@ def digest_authorization(challenge: str, user: str, password: str, method: str, 
 
 
 class Registration:
-    """Keeps a Yemot SIP account registered so `type=sip` extensions can ring this bridge."""
+    """Keeps a Yemot SIP account registered so `type=sip` extensions can ring this bridge.
 
-    def __init__(self, endpoint: SipEndpoint, host: str, port: int, user: str, password: str, expires: int):
+    Yemot blocks an IP that sends 5 bad requests in a row, so a rejected registration (wrong password, unknown
+    account) is retried only `max_auth_failures` times, far apart, and then registration stops until restart.
+    Plain network timeouts are not "bad requests" and are retried with a growing delay.
+    """
+
+    def __init__(self, endpoint: SipEndpoint, host: str, port: int, user: str, password: str, expires: int,
+                 auth_retry_delay: float = 600.0, max_auth_failures: int = 2):
         self.ep, self.host, self.port = endpoint, host, port
         self.user, self.password, self.expires = user, password, expires
+        self.auth_retry_delay, self.max_auth_failures = auth_retry_delay, max_auth_failures
         self.call_id = secrets.token_hex(8) + "@" + endpoint.public_ip
         self.tag = secrets.token_hex(5)
         self.cseq = 0
         self.registered = False
+        self.halted = False
+        self.rejections = 0
+        self.last_status: int | None = None
         self.server_ips: set[str] = set()
         self._task: asyncio.Task | None = None
 
@@ -601,27 +613,46 @@ class Registration:
             await self._register(0)
             self.registered = False
 
+    @property
+    def trusted_ips(self) -> set[str]:
+        return self.server_ips | self.ep.response_sources
+
     async def _run(self) -> None:
-        backoff = 5
+        backoff = 5.0
         while True:
             try:
                 infos = await asyncio.get_running_loop().getaddrinfo(self.host, self.port, family=socket.AF_INET,
                                                                        type=socket.SOCK_DGRAM)
                 self.server_ips = {i[4][0] for i in infos}
-                ok = await self._register(self.expires)
+                result = await self._register(self.expires)
             except Exception:
                 log.exception("registration attempt crashed")
-                ok = False
-            self.registered = ok
-            if ok:
-                backoff = 5
+                result = "timeout"
+            was_registered, self.registered = self.registered, result == "ok"
+            if result == "ok":
+                if not was_registered:
+                    log.info("registered with %s as %s; calls to the type=sip extension will ring this bridge",
+                             self.host, self.user)
+                backoff, self.rejections = 5.0, 0
                 await asyncio.sleep(max(15, self.expires * 0.5))
+            elif result == "rejected":
+                self.rejections += 1
+                if self.rejections >= self.max_auth_failures:
+                    self.halted = True
+                    log.error("Yemot rejected the SIP registration (SIP %s) %d times; STOPPED to avoid an IP block. "
+                              "Check YEMOT_SIP_USER/YEMOT_SIP_PASSWORD/YEMOT_REGISTER_HOST and restart.",
+                              self.last_status, self.rejections)
+                    return
+                log.error("Yemot rejected the SIP registration (SIP %s); one more try in %.0fs",
+                          self.last_status, self.auth_retry_delay)
+                await asyncio.sleep(self.auth_retry_delay)
             else:
-                log.warning("registration failed; retry in %ss", backoff)
+                log.warning("no answer from the Yemot SIP server; retry in %.0fs", backoff)
                 await asyncio.sleep(backoff)
-                backoff = min(backoff * 2, 120)
+                backoff = min(backoff * 2, 120.0)
 
-    async def _register(self, expires: int) -> bool:
+    async def _register(self, expires: int) -> str:
+        """Returns 'ok', 'rejected' (the server answered but refused) or 'timeout' (no answer)."""
         dest = (next(iter(self.server_ips)) if self.server_ips else self.host, self.port)
         uri = f"sip:{self.host}"
         auth: str | None = None
@@ -644,11 +675,16 @@ class Registration:
                 req.add(auth_header, auth)
             resp = await self.ep._request(req, dest, self.call_id, self.cseq)
             if resp is None:
-                return False
-            if resp.status in (401, 407) and not auth:
+                return "timeout"
+            self.last_status = resp.status
+            if resp.status in (401, 407) and not auth:  # the normal digest challenge, not a failure
                 chal = resp.get("www-authenticate") or resp.get("proxy-authenticate") or ""
-                auth = digest_authorization(chal, self.user, self.password, "REGISTER", uri)
+                try:
+                    auth = digest_authorization(chal, self.user, self.password, "REGISTER", uri)
+                except ValueError as exc:
+                    log.error("cannot answer the digest challenge: %s", exc)
+                    return "rejected"
                 auth_header = "authorization" if resp.status == 401 else "proxy-authorization"
                 continue
-            return bool(resp.status and 200 <= resp.status < 300)
-        return False
+            return "ok" if resp.status and 200 <= resp.status < 300 else "rejected"
+        return "rejected"

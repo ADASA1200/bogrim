@@ -179,7 +179,7 @@ class CallManager:
         if self.cfg.access_token and hmac.compare_digest(user, self.cfg.access_token.encode()):
             return True
         reg = self.registration
-        if reg and reg.registered and ip in reg.server_ips and user == self.cfg.register_user.encode():
+        if reg and reg.registered and ip in reg.trusted_ips and user == self.cfg.register_user.encode():
             return True
         return False
 

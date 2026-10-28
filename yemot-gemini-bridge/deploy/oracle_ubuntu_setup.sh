@@ -102,11 +102,16 @@ Still to do by hand (cannot be done from inside the VM):
         destination port $SIP_PORT
         destination port range $RTP_MIN-$RTP_MAX
 
-Then, from ANOTHER computer:
+Then, from ANOTHER computer (checks the ports; the second line is a test call for option B):
   python3 -m bridge.probe $PUBLIC_IP
   python3 -m bridge.probe $PUBLIC_IP --token <ACCESS_TOKEN>
 
-Yemot extension (ext.ini of the extension that should talk to Gemini):
+Yemot, option A (recommended) - extension type=sip with a registered SIP account:
+  sudo $APP/venv/bin/python -m bridge.yemot_setup --extension 5 --host <SIP server from the site's
+      business-switchboard tab> --env $APP/.env
+  sudo systemctl restart $SVC        # then look for "registered with ..." in the log
+
+Yemot, option B - extension type=routing_ip (no account; the token goes in routing_extension):
   type=routing_ip
   routing_ip=$PUBLIC_IP
   routing_ip_port=$SIP_PORT

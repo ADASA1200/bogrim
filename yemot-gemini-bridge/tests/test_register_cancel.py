@@ -128,3 +128,58 @@ async def test_cancel_during_setup_sends_487_and_cleans_up():
         y.close()
         await mgr.shutdown()
         ep.close()
+
+
+async def test_wrong_password_stops_after_two_rounds_to_avoid_ip_block():
+    loop = asyncio.get_running_loop()
+    registrar = FakeRegistrar()
+    await loop.create_datagram_endpoint(lambda: registrar, local_addr=("127.0.0.1", REG_PORT + 5))
+    cfg = Config(gemini_api_key="x", public_ip="127.0.0.1", sip_bind="127.0.0.1", sip_port=BRIDGE_PORT + 4,
+                 rtp_min=16400, rtp_max=16460, register_host="127.0.0.1", register_port=REG_PORT + 5,
+                 register_user="0772222770=2", register_password="WRONG")
+    mgr = CallManager(cfg, build_registry(), gemini_client=FakeLive())
+    ep = SipEndpoint(cfg.public_ip, cfg.sip_port, mgr)
+    mgr.endpoint = ep
+    await ep.start(cfg.sip_bind)
+    reg = Registration(ep, cfg.register_host, cfg.register_port, cfg.register_user, cfg.register_password,
+                       cfg.register_expires, auth_retry_delay=0.1, max_auth_failures=2)
+    mgr.registration = reg
+    reg.start()
+    try:
+        await until(lambda: reg.halted)
+        seen = len(registrar.requests)
+        assert seen == 4  # (challenge + rejected attempt) x 2 rounds, then nothing more
+        await asyncio.sleep(0.5)
+        assert len(registrar.requests) == seen and not reg.registered and registrar.authed == 0
+    finally:
+        await mgr.shutdown()
+        ep.close()
+
+
+async def test_register_mode_rejects_invite_from_untrusted_source():
+    loop = asyncio.get_running_loop()
+    registrar = FakeRegistrar()
+    await loop.create_datagram_endpoint(lambda: registrar, local_addr=("127.0.0.1", REG_PORT + 6))
+    cfg = Config(gemini_api_key="x", public_ip="127.0.0.1", sip_bind="127.0.0.1", sip_port=BRIDGE_PORT + 6,
+                 rtp_min=16500, rtp_max=16560, register_host="127.0.0.1", register_port=REG_PORT + 6,
+                 register_user="0772222770=2", register_password="s3cret")
+    mgr = CallManager(cfg, build_registry(), gemini_client=FakeLive())
+    ep = SipEndpoint(cfg.public_ip, cfg.sip_port, mgr)
+    mgr.endpoint = ep
+    await ep.start(cfg.sip_bind)
+    reg = Registration(ep, cfg.register_host, cfg.register_port, cfg.register_user, cfg.register_password, 60)
+    mgr.registration = reg
+    reg.start()
+    y = FakeYemot(("127.0.0.1", BRIDGE_PORT + 6), "0772222770=2", 17130)
+    await y.open()
+    try:
+        await until(lambda: reg.registered)
+        assert "127.0.0.1" in reg.trusted_ips  # learned from DNS and from who actually answered
+        reg.server_ips, ep.response_sources = {"203.0.113.50"}, set()  # now the INVITE comes from a stranger
+        y.send_invite()
+        assert (await y.wait_final()).status == 404
+        assert not mgr.calls
+    finally:
+        y.close()
+        await mgr.shutdown()
+        ep.close()

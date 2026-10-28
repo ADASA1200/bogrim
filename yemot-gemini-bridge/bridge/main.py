@@ -36,6 +36,7 @@ async def start_status_server(cfg: Config, manager: CallManager, started: float)
             "total_calls": manager.total_calls,
             "max_calls": cfg.max_calls,
             "registered": bool(reg and reg.registered),
+            "registration_halted": bool(reg and reg.halted),
             "model": cfg.gemini_model,
             "calls": [{"id": c.call_id[:8], "seconds": int(time.monotonic() - c.started),
                        "tool_calls": c.gemini.tool_calls if c.gemini else 0} for c in manager.calls.values()],
