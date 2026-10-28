@@ -97,3 +97,25 @@ async def test_api_error_aborts_without_touching_env(tmp_path, monkeypatch, caps
     assert rc == 1 and not env.exists()
     assert "FAILED: GetSipAccountsInCustomer: ERROR denied" in capsys.readouterr().out
     assert len(mock.calls) == 1  # stops at the first failure
+
+
+async def test_use_account_picks_a_specific_existing_account(tmp_path, monkeypatch, capsys):
+    mock = MockYemot(existing=[
+        {"id": "086693864", "accountNumber": 1, "extensionNote": None, "password": "Pw1"},
+        {"id": "086693864=2", "accountNumber": 2, "extensionNote": None, "password": "Pw2"}])
+    runner, base = await start(mock)
+    env = tmp_path / ".env"
+    monkeypatch.setenv("YEMOT_API_TOKEN", "good-token")
+    try:
+        rc = await yemot_setup.run(["--extension", "7", "--use-account", "086693864", "--host", "sip.yemot.co.il",
+                                    "--env", str(env), "--api-base", base])
+        rc_missing = await yemot_setup.run(["--extension", "7", "--use-account", "nope", "--env", str(env) + "2",
+                                            "--api-base", base])
+    finally:
+        await runner.cleanup()
+    assert rc == 0 and "CreateSipAccount" not in [c[0] for c in mock.calls]
+    text = env.read_text()
+    assert "YEMOT_SIP_USER=086693864" in text and "YEMOT_SIP_PASSWORD=Pw1" in text
+    assert "YEMOT_REGISTER_HOST=sip.yemot.co.il" in text
+    assert [c[1] for c in mock.calls if c[0] == "UpdateExtension"][0]["account_dial_number"] == 1
+    assert rc_missing == 1 and "no SIP account 'nope'" in capsys.readouterr().out

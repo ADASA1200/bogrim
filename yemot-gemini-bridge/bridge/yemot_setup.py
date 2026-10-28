@@ -74,6 +74,8 @@ async def run(argv: list[str]) -> int:
     ap.add_argument("--host", help="SIP server to register to (from the 'מרכזיה עסקית' tab)")
     ap.add_argument("--env", default=".env", help="bridge .env file to update (default ./.env)")
     ap.add_argument("--ext-number", type=int, help="internal extension number for the account (200-10000)")
+    ap.add_argument("--use-account", help="reuse an existing SIP account (its username or account number) "
+                                          "instead of creating one; its password is fetched from Yemot")
     ap.add_argument("--api-base", default=DEFAULT_API)
     ap.add_argument("--dial-timeout", type=int, default=30, help="sip_timeout for the extension, seconds")
     ap.add_argument("--no-extension", action="store_true", help="only create/reuse the account")
@@ -89,10 +91,19 @@ async def run(argv: list[str]) -> int:
     async with aiohttp.ClientSession(timeout=timeout) as session:
         try:
             listing = await api(session, args.api_base, token, "GetSipAccountsInCustomer")
-            existing = next((a for a in listing.get("accounts", []) if a.get("extensionNote") == ACCOUNT_NOTE), None)
+            accounts = listing.get("accounts", [])
+            if args.use_account:
+                wanted = args.use_account.strip()
+                existing = next((a for a in accounts if a.get("id") == wanted or str(a.get("accountNumber")) == wanted),
+                                None)
+                if existing is None:
+                    known = ", ".join(str(a.get("id")) for a in accounts) or "none"
+                    raise SetupError(f"no SIP account '{wanted}' in this system (accounts: {known})")
+            else:
+                existing = next((a for a in accounts if a.get("extensionNote") == ACCOUNT_NOTE), None)
             if existing:
                 account_number, user, password = existing["accountNumber"], existing["id"], existing["password"]
-                print(f"Reusing the existing '{ACCOUNT_NOTE}' account (number {account_number}).")
+                print(f"Using the existing SIP account {user} (number {account_number}).")
             else:
                 params = {"extensionNote": ACCOUNT_NOTE}
                 if args.ext_number:
