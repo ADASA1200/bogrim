@@ -1,0 +1,6 @@
+google-genai>=2.33,<3
+numpy>=2.0
+soxr>=0.5
+aiohttp>=3.10
+pyluach>=2.2
+tzdata

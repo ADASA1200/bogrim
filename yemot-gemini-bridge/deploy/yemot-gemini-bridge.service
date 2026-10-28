@@ -1,0 +1,21 @@
+[Unit]
+Description=Yemot <-> Gemini Live SIP bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=bridge
+WorkingDirectory=/opt/yemot-gemini-bridge
+EnvironmentFile=/opt/yemot-gemini-bridge/.env
+ExecStart=/opt/yemot-gemini-bridge/venv/bin/python -m bridge.main
+Restart=always
+RestartSec=3
+# SIGTERM hangs up active calls cleanly
+TimeoutStopSec=15
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

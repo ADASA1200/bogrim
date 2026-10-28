@@ -1,0 +1,8 @@
+services:
+  bridge:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    # Host networking keeps SIP/RTP addressing simple: the SDP we send advertises PUBLIC_IP and the RTP ports
+    # below, so they must be reachable 1:1 from outside (no port remapping).
+    network_mode: host
