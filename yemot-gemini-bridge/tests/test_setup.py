@@ -157,3 +157,17 @@ async def test_existing_extension_is_not_overwritten_without_flag(tmp_path, monk
     finally:
         await runner.cleanup()
     assert rc == 0 and "UpdateExtension" in [c[0] for c in mock.calls]
+
+
+async def test_token_can_be_read_from_a_file(tmp_path, monkeypatch):
+    mock = MockYemot()
+    runner, base = await start(mock)
+    token_file = tmp_path / "token"
+    token_file.write_text("good-token\n")
+    monkeypatch.delenv("YEMOT_API_TOKEN", raising=False)
+    try:
+        rc = await yemot_setup.run(["--extension", "5", "--token-file", str(token_file),
+                                    "--env", str(tmp_path / ".env"), "--api-base", base])
+    finally:
+        await runner.cleanup()
+    assert rc == 0 and all(c[2] == "good-token" for c in mock.calls)

@@ -77,13 +77,18 @@ async def run(argv: list[str]) -> int:
     ap.add_argument("--use-account", help="reuse an existing SIP account (its username or account number) "
                                           "instead of creating one; its password is fetched from Yemot")
     ap.add_argument("--api-base", default=DEFAULT_API)
+    ap.add_argument("--token-file", help="read the Yemot management token from this file (instead of asking)")
     ap.add_argument("--dial-timeout", type=int, default=30, help="sip_timeout for the extension, seconds")
     ap.add_argument("--no-extension", action="store_true", help="only create/reuse the account")
     ap.add_argument("--use-existing", action="store_true",
                     help="allow turning an extension that already exists into the Gemini line (changes its type)")
     args = ap.parse_args(argv)
 
-    token = os.environ.get("YEMOT_API_TOKEN") or getpass.getpass("Yemot API token (hidden): ")
+    token = ""
+    if args.token_file:
+        with open(args.token_file, encoding="utf-8") as fh:
+            token = fh.read().strip()
+    token = token or os.environ.get("YEMOT_API_TOKEN") or getpass.getpass("Yemot API token (hidden): ")
     if not token:
         print("a token is required")
         return 2

@@ -10,11 +10,11 @@
 # Safe to re-run: existing .env is kept, rules are only added when missing.
 set -euo pipefail
 
-APP=/opt/yemot-gemini-bridge
+APP="${APP_DIR:-/opt/yemot-gemini-bridge}"
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 SVC=yemot-gemini-bridge
 
-[ "$(id -u)" -ne 0 ] || { echo "Run as the normal 'ubuntu' user (it uses sudo where needed), not as root."; exit 1; }
+[ "$(id -u)" -ne 0 ] || [ -n "${ALLOW_ROOT:-}" ] || { echo "Run as the normal 'ubuntu' user (it uses sudo where needed), not as root."; exit 1; }
 [ -f "$SRC/bridge/main.py" ] || { echo "Run this from the repository (bridge/main.py not found in $SRC)."; exit 1; }
 
 echo "== 1/6 packages"
@@ -32,7 +32,16 @@ sudo "$APP/venv/bin/pip" install --quiet --upgrade pip
 sudo "$APP/venv/bin/pip" install --quiet -r "$APP/requirements.txt"
 
 echo "== 3/6 configuration ($APP/.env)"
-if [ ! -f "$APP/.env" ]; then
+if [ ! -f "$APP/.env" ] && [ -f "$SRC/.env" ]; then
+    # A prepared bundle ships its own .env: use it without asking anything.
+    sudo cp "$SRC/.env" "$APP/.env"
+    detected_ip="$(curl -fsS --max-time 5 https://api.ipify.org || true)"
+    current_ip="$(grep -E '^PUBLIC_IP=' "$APP/.env" | cut -d= -f2-)"
+    if [ -n "$detected_ip" ] && [ "$detected_ip" != "$current_ip" ]; then
+        echo "NOTE: this server's public IP is $detected_ip (the bundle said ${current_ip:-none}); using $detected_ip."
+        sudo sed -i "s|^PUBLIC_IP=.*|PUBLIC_IP=$detected_ip|" "$APP/.env"
+    fi
+elif [ ! -f "$APP/.env" ]; then
     default_ip="$(curl -fsS --max-time 5 https://api.ipify.org || true)"
     read -r -p "Public IPv4 that Yemot will call [${default_ip}]: " PUBLIC_IP
     PUBLIC_IP="${PUBLIC_IP:-$default_ip}"
@@ -94,6 +103,7 @@ sleep 2
 sudo systemctl --no-pager --lines=8 status "$SVC" || true
 
 echo "== 6/6 done"
+[ -z "${BUNDLE_MODE:-}" ] || exit 0
 cat <<EOF
 
 Still to do by hand (cannot be done from inside the VM):
