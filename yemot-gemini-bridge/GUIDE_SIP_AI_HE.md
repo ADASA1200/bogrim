@@ -25,7 +25,7 @@
 
 ## 1. חשבון SIP בימות המשיח
 1. באתר ימות: **מרכזייה עסקית ← חשבונות SIP ← יצירת חשבון**. אפשר גם דרך ה־API (`CreateSipAccount`).
-2. רשום את **מספר החשבון** (למשל `086693864`) ואת **הסיסמה**.
+2. רשום את **מספר החשבון** (למשל `<מספר-חשבון>`) ואת **הסיסמה**.
 3. ודא שהחשבון בפרוטוקול **UDP** (ה־API: `SipToUdp`). ההודעה "already UDP" אומרת שהכול בסדר.
 4. שרת ה־SIP הוא `sip.yemot.co.il`, פורט 5060.
 
@@ -42,7 +42,7 @@ sip_timeout=30
 
 ## 3. חיבור לשרת
 ```powershell
-$key = "$env:USERPROFILE\Downloads\ssh-key-2026-09-01.key"; $srv = "ubuntu@129.159.157.8"
+$key = "$env:USERPROFILE\Downloads\<שם-קובץ-המפתח>.key"; $srv = "ubuntu@<כתובת-השרת>"
 ```
 ```powershell
 ssh -o ServerAliveInterval=20 -i $key $srv
