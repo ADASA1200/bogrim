@@ -229,6 +229,7 @@ class CallManager:
             self.total_calls += 1
             log.info("[%s] call accepted (%s, rtp port %d)", call.label, name, port)
             sdp = build_answer(self.cfg.public_ip, port, pt, name, offer.telephone_event_pt)
+            rtp.punch()
             return Accept(sdp=sdp, call=call)
         except Exception as exc:
             log.error("could not set up call: %r", exc)

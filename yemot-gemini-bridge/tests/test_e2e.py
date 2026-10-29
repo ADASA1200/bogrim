@@ -229,3 +229,19 @@ async def test_pcmu_fallback_when_alaw_not_offered(stack):
         await until(lambda: has_audio(y.rtp_rx, y.codec))
     finally:
         y.close()
+
+
+async def test_firewall_pinhole_packets_are_sent_before_the_call_is_acked(stack):
+    mgr, ep, live = await stack()
+    y = await open_yemot(17140)
+    try:
+        await answer_call(y)  # final 200 received, ACK deliberately not sent yet
+        await until(lambda: len(y.rtp_rx) >= 5)
+        assert not has_audio(y.rtp_rx, y.codec)  # only silence before the call is answered
+        n = len(y.rtp_rx)
+        y.send_ack()
+        await until(lambda: len(y.rtp_rx) > n + 10)
+        seqs = y.rtp_seqs
+        assert all((b - a) & 0xFFFF == 1 for a, b in zip(seqs, seqs[1:]))  # sequence continues without a gap
+    finally:
+        y.close()

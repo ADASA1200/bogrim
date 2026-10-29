@@ -51,6 +51,7 @@ class RtpSession(asyncio.DatagramProtocol):
         self._out = bytearray()
         self._pacer: asyncio.Task | None = None
         self._last_dtmf_ts: int | None = None
+        self._punched_at: float | None = None
         self.packets_in = 0
         self.packets_out = 0
         self.last_rx = 0.0
@@ -59,9 +60,25 @@ class RtpSession(asyncio.DatagramProtocol):
         loop = asyncio.get_running_loop()
         await loop.create_datagram_endpoint(lambda: self, local_addr=(bind_ip, port))
 
+    def punch(self, frames: int = 5) -> None:
+        """Send a few silent packets to the caller's media address before answering.
+
+        A stateful firewall (e.g. an Oracle Cloud Security List without an inbound UDP rule) then treats the
+        caller's RTP as return traffic of a flow we started, so audio can reach us even with no inbound rule.
+        """
+        if self._transport is None:
+            return
+        self._punched_at = asyncio.get_running_loop().time()
+        for _ in range(frames):
+            self._send_frame(None)
+
     def start_sending(self) -> None:
         """Begin the 20 ms send clock; call once the call is answered."""
         if self._pacer is None and self._transport is not None:
+            if self._punched_at is not None:  # keep the RTP timestamp in step with wall-clock time
+                gap = asyncio.get_running_loop().time() - self._punched_at
+                self._ts = (self._ts + int(gap * 8000)) & 0xFFFFFFFF
+                self._marker = True
             self._pacer = asyncio.create_task(self._pace(), name="rtp-pacer")
 
     def connection_made(self, transport) -> None:  # noqa: D401

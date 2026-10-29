@@ -37,6 +37,13 @@
 ואז: sudo systemctl restart yemot-gemini-bridge
 (אם הרישום נדחה, אל תנסה שוב ושוב: ימות חוסמת כתובת אחרי 5 ניסיונות שגויים.)
 
+אבחון כשמתקשרים ולא עובד (אפשר בלי הקונסולה):
+   sudo journalctl -u yemot-gemini-bridge -f
+   - רואים "call accepted"  = הבקשה הגיעה. אם אין קול, חסרים כללי RTP (UDP 10000-10199) ב-Oracle.
+   - לא רואים כלום כשמתקשרים = הבקשה מימות לא הגיעה: חסר כלל UDP 5060 ב-Oracle, או החשבון לא רשום.
+   אפשר לראות אם חבילות מגיעות בכלל:
+   sudo apt-get install -y tcpdump && sudo tcpdump -ni any "udp port 5060"
+
 צפייה בלוג:   sudo journalctl -u yemot-gemini-bridge -f
 בדיקת Gemini בלי ימות:
    cd /opt/yemot-gemini-bridge && ./venv/bin/python -m bridge.probe 127.0.0.1 --token "$(sudo grep ^ACCESS_TOKEN= .env | cut -d= -f2)"
