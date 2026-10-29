@@ -245,3 +245,73 @@ async def test_firewall_pinhole_packets_are_sent_before_the_call_is_acked(stack)
         assert all((b - a) & 0xFFFF == 1 for a, b in zip(seqs, seqs[1:]))  # sequence continues without a gap
     finally:
         y.close()
+
+
+async def test_hash_key_hangs_up_like_the_proven_bridge(stack):
+    mgr, ep, live = await stack()
+    y = await open_yemot(17150)
+    try:
+        final = await answer_call(y)
+        y.rtp_dest = int(final.body.decode().split("m=audio ")[1].split()[0])
+        y.send_ack()
+        await until(lambda: live.sessions and live.sessions[0].client_contents)
+        y.send_dtmf(11)  # '#'
+        await asyncio.wait_for(y.bye_received.wait(), 5)
+        await until(lambda: not mgr.calls)
+        assert not any("DTMF" in t for t in live.sessions[0].texts)  # not forwarded to the model
+    finally:
+        y.close()
+
+
+async def test_call_is_dropped_when_no_rtp_ever_arrives(stack):
+    mgr, ep, live = await stack(rtp_silence_timeout=0.8)
+    y = await open_yemot(17160)
+    try:
+        await answer_call(y)
+        y.send_ack()  # answered, but the caller never sends audio (one-way/blocked RTP)
+        await asyncio.wait_for(y.bye_received.wait(), 6)
+        await until(lambda: not mgr.calls)
+    finally:
+        y.close()
+
+
+async def test_default_codec_follows_the_offer_order(stack):
+    mgr, ep, live = await stack()
+    y = await open_yemot(17170, codec="PCMU")
+    try:
+        final = await answer_call(y, codecs="0 8 101")  # PCMU first
+        assert "RTP/AVP 0 101" in final.body.decode()
+    finally:
+        y.close()
+
+
+async def test_quiet_caller_audio_is_gated_and_loud_audio_passes(stack):
+    mgr, ep, live = await stack()
+    y = await open_yemot(17180)
+    try:
+        final = await answer_call(y)
+        y.rtp_dest = int(final.body.decode().split("m=audio ")[1].split()[0])
+        y.send_ack()
+        await until(lambda: live.sessions and live.sessions[0].client_contents)
+        sess = live.sessions[0]
+        seen = []
+        orig = sess.send_realtime_input
+
+        async def spy(**kw):
+            if kw.get("audio") is not None:
+                seen.append(np.frombuffer(kw["audio"].data, dtype="<i2"))
+            return await orig(**kw)
+        sess.send_realtime_input = spy
+        for _ in range(10):
+            y.send_rtp_frame(tone(8000, 20, 700, amp=0.002))   # almost silent line noise
+            await asyncio.sleep(0.02)
+        quiet_peak = max((int(np.abs(a).max()) for a in seen if a.size), default=0)
+        n = len(seen)
+        for _ in range(10):
+            y.send_rtp_frame(tone(8000, 20, 700, amp=0.3))
+            await asyncio.sleep(0.02)
+        await until(lambda: len(seen) > n + 5)
+        loud_peak = max(int(np.abs(a).max()) for a in seen[n:] if a.size)
+        assert quiet_peak == 0 and loud_peak > 3000
+    finally:
+        y.close()

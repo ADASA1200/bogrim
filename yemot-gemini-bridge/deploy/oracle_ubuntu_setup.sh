@@ -41,6 +41,28 @@ if [ ! -f "$APP/.env" ] && [ -f "$SRC/.env" ]; then
         echo "NOTE: this server's public IP is $detected_ip (the bundle said ${current_ip:-none}); using $detected_ip."
         sudo sed -i "s|^PUBLIC_IP=.*|PUBLIC_IP=$detected_ip|" "$APP/.env"
     fi
+elif [ -f "$APP/.env" ] && [ -f "$SRC/.env" ]; then
+    # Re-install with a newer bundle: take over the non-secret tuning values, keep keys/account details as they are.
+    sudo python3 - "$SRC/.env" "$APP/.env" <<'PY'
+import re, sys
+src, dst = sys.argv[1:3]
+KEEP = {"GEMINI_API_KEY", "ACCESS_TOKEN", "PUBLIC_IP", "YEMOT_SIP_USER", "YEMOT_SIP_PASSWORD", "YEMOT_REGISTER_HOST"}
+new = dict(l.split("=", 1) for l in open(src, encoding="utf-8").read().splitlines()
+           if "=" in l and not l.lstrip().startswith("#"))
+out, seen = [], set()
+for line in open(dst, encoding="utf-8").read().splitlines():
+    m = re.match(r"^([A-Z0-9_]+)=", line)
+    if m and m.group(1) in new and m.group(1) not in KEEP:
+        out.append(f"{m.group(1)}={new[m.group(1)]}")
+        seen.add(m.group(1))
+    else:
+        out.append(line)
+        if m:
+            seen.add(m.group(1))
+out += [f"{k}={v}" for k, v in new.items() if k not in KEEP and k not in seen]
+open(dst, "w", encoding="utf-8").write("\n".join(out) + "\n")
+PY
+    echo "Updated the tuning values in $APP/.env (keys and Yemot account details were kept)."
 elif [ ! -f "$APP/.env" ]; then
     default_ip="$(curl -fsS --max-time 5 https://api.ipify.org || true)"
     read -r -p "Public IPv4 that Yemot will call [${default_ip}]: " PUBLIC_IP

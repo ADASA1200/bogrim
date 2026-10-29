@@ -70,7 +70,9 @@ def parse_offer(body: str) -> Offer:
 
 
 def choose_codec(offer: Offer, preference: tuple[str, ...]) -> tuple[int, str]:
-    """Pick the first codec from our preference list that the caller offered."""
+    """Pick our preferred codec the caller offered; with no preference, the caller's first supported one."""
+    if not preference and offer.codecs:
+        return offer.codecs[0]
     for want in preference:
         for pt, name in offer.codecs:
             if name == want:

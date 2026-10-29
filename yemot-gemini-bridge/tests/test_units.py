@@ -1,4 +1,5 @@
 import ipaddress
+import os
 
 import numpy as np
 import pytest
@@ -171,3 +172,64 @@ def test_config_validation(monkeypatch):
     c = cfgmod.Config.from_env()
     assert c.gemini_model == "gemini-3.8-live" and c.sip_port == 5060
     assert ipaddress.ip_network("198.51.100.0/24") in c.allowed_networks
+
+
+# ---- parity with the proven SMSBOTAI bridge ------------------------------------
+
+def test_noise_gate_silences_quiet_frames_only():
+    from bridge.audio import noise_gate
+    quiet = tone(16000, 20, 500, amp=0.004)   # RMS ~ 90 < 200
+    loud = tone(16000, 20, 500, amp=0.2)      # RMS ~ 4600
+    assert noise_gate(quiet, 200.0) == bytes(len(quiet))
+    assert noise_gate(loud, 200.0) == loud
+    assert noise_gate(quiet, 0) == quiet       # threshold 0 disables the gate
+    assert noise_gate(b"", 200.0) == b""
+
+
+def test_apply_volume_scales_and_clips():
+    from bridge.audio import apply_volume
+    pcm = np.array([1000, -1000, 30000, -30000], dtype="<i2").tobytes()
+    out = np.frombuffer(apply_volume(pcm, 0.4), dtype="<i2")
+    assert list(out) == [400, -400, 12000, -12000]
+    loud = np.frombuffer(apply_volume(pcm, 2.0), dtype="<i2")
+    assert list(loud) == [2000, -2000, 32767, -32768]
+    assert apply_volume(pcm, 1.0) == pcm
+
+
+def test_codec_follows_the_callers_order_unless_a_preference_is_set():
+    offer = parse_offer(OFFER)                      # offered order: PCMU(0), PCMA(8)
+    assert choose_codec(offer, ()) == (0, "PCMU")
+    assert choose_codec(offer, ("PCMA", "PCMU")) == (8, "PCMA")
+
+
+def test_defaults_match_the_proven_bridge(monkeypatch):
+    for k in list(os.environ):
+        if k.startswith(("GEMINI", "ACCESS", "PUBLIC", "YEMOT", "VAD", "INPUT", "OUTPUT", "HANGUP", "RTP", "CODEC")):
+            monkeypatch.delenv(k)
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setenv("ACCESS_TOKEN", "Abc123_-.xyzABC123456")
+    monkeypatch.setenv("PUBLIC_IP", "203.0.113.7")
+    c = cfgmod.Config.from_env()
+    assert (c.voice, c.vad_silence_ms, c.vad_start_sensitivity, c.vad_end_sensitivity) == ("Charon", 800, "HIGH", "HIGH")
+    assert (c.input_noise_gate_rms, c.output_volume, c.hangup_on_hash, c.rtp_silence_timeout) == (200.0, 0.4, True, 10.0)
+    assert c.codec_preference == ()
+    monkeypatch.setenv("VAD_START_SENSITIVITY", "MEDIUM")
+    with pytest.raises(cfgmod.ConfigError):
+        cfgmod.Config.from_env()
+
+
+def test_uplink_resampler_emits_per_packet_without_buffering_delay():
+    up = StreamResampler(8000, 16000, quality="QQ")
+    sizes = [len(up.process(tone(8000, 20, 500))) for _ in range(20)]
+    assert all(s >= 600 for s in sizes)          # ~640 bytes (20 ms @ 16 kHz) for every 20 ms packet, from the first one
+
+
+def test_downlink_flush_returns_the_held_tail_and_starts_clean():
+    down = StreamResampler(24000, 8000, quality="HQ")
+    src = tone(24000, 400, 600)
+    out = b"".join(down.process(src[i:i + 960]) for i in range(0, len(src), 960))
+    held = 400 * 8 * 2 - len(out)                # bytes still inside the filter after a 400 ms turn
+    tail = down.flush()
+    assert held > 0 and abs(len(out) + len(tail) - 400 * 8 * 2) < 40
+    assert down.process(tone(24000, 400, 600))   # usable again after the flush
+    down.reset()

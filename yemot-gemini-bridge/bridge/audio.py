@@ -84,12 +84,21 @@ class G711:
 
 
 class StreamResampler:
-    """Stateful mono int16 resampler; safe to feed arbitrary chunk sizes."""
+    """Stateful mono int16 resampler; safe to feed arbitrary chunk sizes.
+
+    With 20 ms packets the better soxr qualities hold audio back and emit it in ~100 ms bursts (MQ: 120 ms before
+    the first output), so use "QQ" for the live caller->Gemini path (no delay) and flush() the downlink at the
+    end of each model turn, otherwise the last ~30 ms of speech would only play when the next turn starts.
+    """
 
     def __init__(self, in_rate: int, out_rate: int, quality: str = "MQ"):
-        # MQ/HQ add only ~15-26 ms of filter delay here; LQ is slower than MQ and HQ upsampling adds ~66 ms.
-        self._stream = soxr.ResampleStream(in_rate, out_rate, 1, dtype="int16", quality=quality)
+        self._args = (in_rate, out_rate, quality)
         self._carry = b""
+        self._new_stream()
+
+    def _new_stream(self) -> None:
+        in_rate, out_rate, quality = self._args
+        self._stream = soxr.ResampleStream(in_rate, out_rate, 1, dtype="int16", quality=quality)
 
     def process(self, pcm: bytes) -> bytes:
         data = self._carry + pcm
@@ -99,3 +108,33 @@ class StreamResampler:
             return b""
         out = self._stream.resample_chunk(np.frombuffer(data[:usable], dtype="<i2"))
         return np.asarray(out, dtype="<i2").tobytes()
+
+    def flush(self) -> bytes:
+        """Return the audio still held inside the filter and start a fresh stream."""
+        out = self._stream.resample_chunk(np.zeros(0, dtype="<i2"), last=True)
+        self._carry = b""
+        self._new_stream()
+        return np.asarray(out, dtype="<i2").tobytes()
+
+    def reset(self) -> None:
+        """Drop everything buffered (e.g. the caller interrupted the model)."""
+        self._carry = b""
+        self._new_stream()
+
+
+def noise_gate(pcm: bytes, threshold: float) -> bytes:
+    """Replace a frame whose RMS is below `threshold` with silence (same rule as audioop.rms < threshold)."""
+    if threshold <= 0 or not pcm:
+        return pcm
+    samples = np.frombuffer(pcm, dtype="<i2").astype(np.float64)
+    if samples.size and float(np.sqrt(np.mean(samples * samples))) < threshold:
+        return bytes(len(pcm))
+    return pcm
+
+
+def apply_volume(pcm: bytes, factor: float) -> bytes:
+    """Scale int16 PCM by `factor`, clipping like audioop.mul."""
+    if factor == 1.0 or not pcm:
+        return pcm
+    scaled = np.frombuffer(pcm, dtype="<i2").astype(np.float64) * factor
+    return np.clip(np.rint(scaled), -32768, 32767).astype("<i2").tobytes()

@@ -37,6 +37,11 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    return float(raw) if raw not in (None, "") else default
+
+
 def _env_int(name: str, default: int) -> int:
     raw = os.environ.get(name)
     return int(raw) if raw not in (None, "") else default
@@ -51,10 +56,17 @@ class Config:
     # Gemini
     gemini_api_key: str
     gemini_model: str = "gemini-3.8-live"
-    voice: str = "Kore"
+    voice: str = "Charon"
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
     greeting_prompt: str = DEFAULT_GREETING_PROMPT
-    vad_silence_ms: int = 700
+    vad_silence_ms: int = 800
+    vad_start_sensitivity: str = "HIGH"
+    vad_end_sensitivity: str = "HIGH"
+    # Same line-level tuning as the proven SMSBOTAI bridge: gate near-silence, attenuate Gemini's output.
+    input_noise_gate_rms: float = 200.0
+    output_volume: float = 0.4
+    hangup_on_hash: bool = True
+    rtp_silence_timeout: float = 10.0
     log_transcripts: bool = False
     tz: str = "Asia/Jerusalem"
     enable_google_search: bool = True
@@ -65,7 +77,8 @@ class Config:
     sip_port: int = 5060
     rtp_min: int = 10000
     rtp_max: int = 10199
-    codec_preference: tuple[str, ...] = ("PCMA", "PCMU")
+    # Empty = follow the caller's codec order (what pyVoIP does); otherwise our preference list.
+    codec_preference: tuple[str, ...] = ()
     # Access control for routing_ip mode (Yemot sends INVITE sip:<token>@ip:port)
     access_token: str = ""
     allowed_networks: tuple = field(default_factory=tuple)
@@ -113,10 +126,16 @@ class Config:
         cfg = cls(
             gemini_api_key=key,
             gemini_model=os.environ.get("GEMINI_MODEL", "gemini-3.8-live"),
-            voice=os.environ.get("GEMINI_VOICE", "Kore"),
+            voice=os.environ.get("GEMINI_VOICE", "Charon"),
             system_prompt=prompt,
             greeting_prompt=os.environ.get("GREETING_PROMPT", DEFAULT_GREETING_PROMPT),
-            vad_silence_ms=_env_int("VAD_SILENCE_MS", 700),
+            vad_silence_ms=_env_int("VAD_SILENCE_MS", 800),
+            vad_start_sensitivity=os.environ.get("VAD_START_SENSITIVITY", "HIGH").strip().upper(),
+            vad_end_sensitivity=os.environ.get("VAD_END_SENSITIVITY", "HIGH").strip().upper(),
+            input_noise_gate_rms=_env_float("INPUT_NOISE_GATE_RMS", 200.0),
+            output_volume=_env_float("OUTPUT_VOLUME", 0.4),
+            hangup_on_hash=_env_bool("HANGUP_ON_HASH", True),
+            rtp_silence_timeout=_env_float("RTP_SILENCE_TIMEOUT", 10.0),
             log_transcripts=_env_bool("LOG_TRANSCRIPTS", False),
             tz=os.environ.get("TZ_NAME", "Asia/Jerusalem"),
             enable_google_search=_env_bool("ENABLE_GOOGLE_SEARCH", True),
@@ -127,7 +146,7 @@ class Config:
             rtp_min=_env_int("RTP_PORT_MIN", 10000),
             rtp_max=_env_int("RTP_PORT_MAX", 10199),
             codec_preference=tuple(
-                c.strip().upper() for c in os.environ.get("CODEC_PREFERENCE", "PCMA,PCMU").split(",") if c.strip()
+                c.strip().upper() for c in os.environ.get("CODEC_PREFERENCE", "").split(",") if c.strip()
             ),
             access_token=token,
             allowed_networks=tuple(nets),
@@ -148,6 +167,10 @@ class Config:
             raise ConfigError("YEMOT_SIP_USER and YEMOT_SIP_PASSWORD are required with YEMOT_REGISTER_HOST")
         if cfg.status_port and len(cfg.status_token) < 16:
             raise ConfigError("STATUS_TOKEN (>=16 chars) is required when STATUS_PORT is set")
+        for name, value in (("VAD_START_SENSITIVITY", cfg.vad_start_sensitivity),
+                            ("VAD_END_SENSITIVITY", cfg.vad_end_sensitivity)):
+            if value not in ("HIGH", "LOW"):
+                raise ConfigError(f"{name} must be HIGH or LOW")
         if cfg.rtp_max - cfg.rtp_min < 2 * cfg.max_calls:
             raise ConfigError("RTP port range too small for MAX_CALLS")
         return cfg

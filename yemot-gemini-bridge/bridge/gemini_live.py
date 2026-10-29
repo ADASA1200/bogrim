@@ -37,7 +37,9 @@ def build_live_config(cfg: Config, registry: ToolRegistry, handle: str | None = 
         tools=tools,
         realtime_input_config=types.RealtimeInputConfig(
             automatic_activity_detection=types.AutomaticActivityDetection(
-                silence_duration_ms=cfg.vad_silence_ms, prefix_padding_ms=100)),
+                silence_duration_ms=cfg.vad_silence_ms,
+                start_of_speech_sensitivity=types.StartSensitivity(f"START_SENSITIVITY_{cfg.vad_start_sensitivity}"),
+                end_of_speech_sensitivity=types.EndSensitivity(f"END_SENSITIVITY_{cfg.vad_end_sensitivity}"))),
         input_audio_transcription=types.AudioTranscriptionConfig() if cfg.log_transcripts else None,
         output_audio_transcription=types.AudioTranscriptionConfig() if cfg.log_transcripts else None,
         # Without compression an audio session ends after ~15 min; with it the call can run for as long as needed.

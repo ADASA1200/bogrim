@@ -10,7 +10,8 @@ import time
 from collections import defaultdict, deque
 from typing import Any
 
-from .audio import GEMINI_IN_RATE, GEMINI_OUT_RATE, TELEPHONE_RATE, G711, StreamResampler
+from .audio import (GEMINI_IN_RATE, GEMINI_OUT_RATE, TELEPHONE_RATE, G711, StreamResampler, apply_volume,
+                    noise_gate)
 from .config import Config
 from .gemini_live import GeminiLive
 from .rtp import PortPool, RtpSession
@@ -21,7 +22,6 @@ from .tools import ToolContext, ToolRegistry
 log = logging.getLogger("bridge.call")
 
 AUTH_FAIL_LIMIT = 10  # per source IP per minute
-RTP_SILENCE_TIMEOUT = 30
 FAREWELL_DRAIN_TIMEOUT = 12
 
 
@@ -38,12 +38,13 @@ class Call:
         self.rtp = rtp
         self.rtp_port = rtp_port
         self.started = time.monotonic()
-        self.up = StreamResampler(TELEPHONE_RATE, GEMINI_IN_RATE)
+        self.up = StreamResampler(TELEPHONE_RATE, GEMINI_IN_RATE, quality="QQ")  # QQ: no buffering delay
         self.down = StreamResampler(GEMINI_OUT_RATE, TELEPHONE_RATE, quality="HQ")  # best anti-aliasing for 24k->8k
         self.gemini: GeminiLive | None = None
         self._ending = False
         self._turn_done = asyncio.Event()
         self._finished = asyncio.Event()
+        self.answered_at: float | None = None
         self._watchdog: asyncio.Task | None = None
         self._farewell: asyncio.Task | None = None
         ctx.request_hangup = self.request_hangup
@@ -52,19 +53,23 @@ class Call:
     # ---- media plumbing -----------------------------------------------
     def on_caller_pcm(self, pcm8k: bytes) -> None:
         if self.gemini and not self._ending:
-            data = self.up.process(pcm8k)
+            data = noise_gate(self.up.process(pcm8k), self.manager.cfg.input_noise_gate_rms)
             if data:
                 self.gemini.send_audio(data)
 
     def on_model_audio(self, pcm24k: bytes) -> None:
-        data = self.down.process(pcm24k)
+        data = self.down.process(apply_volume(pcm24k, self.manager.cfg.output_volume))
         if data:
             self.rtp.play(data)
 
     def on_interrupt(self) -> None:
         self.rtp.clear()
+        self.down.reset()
 
     def on_turn_complete(self) -> None:
+        tail = self.down.flush()  # the filter still holds the last ~30 ms of the turn
+        if tail:
+            self.rtp.play(tail)
         self._turn_done.set()
 
     def on_gemini_closed(self, reason: str) -> None:
@@ -72,6 +77,7 @@ class Call:
 
     # ---- SIP-facing callbacks ------------------------------------------
     async def on_answered(self) -> None:
+        self.answered_at = asyncio.get_running_loop().time()
         self.rtp.start_sending()
         self._watchdog = asyncio.create_task(self._watch())
         if self.gemini:
@@ -82,6 +88,9 @@ class Call:
 
     async def on_dtmf(self, digit: str) -> None:
         log.info("[%s] DTMF %s", self.label, digit)
+        if digit == "#" and self.manager.cfg.hangup_on_hash:  # same as the proven bridge: '#' ends the call
+            await self.finish("caller pressed #", send_bye=True)
+            return
         if self.gemini:
             await self.gemini.send_text(f"[DTMF: {digit}]")
 
@@ -118,14 +127,19 @@ class Call:
 
     async def _watch(self) -> None:
         cfg = self.manager.cfg
+        interval = max(0.2, min(2.0, cfg.rtp_silence_timeout / 4))
         try:
             while not self._finished.is_set():
-                await asyncio.sleep(2)
-                now = time.monotonic()
-                if now - self.started > cfg.max_call_seconds:
+                await asyncio.sleep(interval)
+                now = asyncio.get_running_loop().time()
+                if time.monotonic() - self.started > cfg.max_call_seconds:
                     await self.finish("max duration", send_bye=True)
-                elif self.rtp.last_rx and asyncio.get_running_loop().time() - self.rtp.last_rx > RTP_SILENCE_TIMEOUT:
+                    return
+                # no RTP from the caller for rtp_silence_timeout seconds (also when none ever arrived)
+                last = max(self.rtp.last_rx, self.answered_at or 0.0)
+                if last and now - last > cfg.rtp_silence_timeout:
                     await self.finish("no RTP from caller", send_bye=True)
+                    return
         except asyncio.CancelledError:
             pass
 
