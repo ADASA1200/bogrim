@@ -128,8 +128,16 @@ async def run(argv: list[str]) -> int:
                 made = await api(session, args.api_base, token, "CreateSipAccount", **params)
                 account_number, user, password = made["accountNumber"], made["accountID"], made["PASS"]
                 print(f"Created SIP account number {account_number}.")
-            await api(session, args.api_base, token, "SipToUdp", accountNumber=account_number)
-            print("Account transport set to UDP.")
+            if "udp" in str(existing.get("transport", "") if existing else "").lower():
+                print("Account transport is already UDP.")
+            else:
+                try:
+                    await api(session, args.api_base, token, "SipToUdp", accountNumber=account_number)
+                    print("Account transport set to UDP.")
+                except SetupError as exc:
+                    if "לא בוצע שינוי" not in str(exc):  # Yemot answers "no change made" when it is already UDP
+                        raise
+                    print("Account transport is already UDP (Yemot: no change needed).")
             if not args.no_extension:
                 await api(session, args.api_base, token, "UpdateExtension", path=path, type="sip",
                           account_dial_number=account_number, sip_timeout=args.dial_timeout,

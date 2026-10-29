@@ -9,8 +9,9 @@ from bridge import yemot_setup
 
 
 class MockYemot:
-    def __init__(self, existing=None, fail=None, extensions=()):
+    def __init__(self, existing=None, fail=None, extensions=(), noop=()):
         self.extensions = set(extensions)
+        self.noop = set(noop)
         self.calls = []
         self.accounts = list(existing or [])
         self.fail = fail
@@ -21,6 +22,8 @@ class MockYemot:
         self.calls.append((cmd, body, req.headers.get("authorization"), dict(req.query)))
         if req.headers.get("authorization") != "good-token" or cmd == self.fail:
             return web.json_response({"responseStatus": "ERROR", "message": "denied", "messageCode": 7})
+        if cmd in self.noop:  # what Yemot answers when nothing needed changing
+            return web.json_response({"responseStatus": "ERROR", "message": "לא בוצע שינוי"})
         if cmd == "CheckIfFileExists":
             return web.json_response({"responseStatus": "OK", "path": body["path"],
                                       "fileExists": body["path"] in {f"ivr2:{e}/ext.ini" for e in self.extensions}})
@@ -171,3 +174,46 @@ async def test_token_can_be_read_from_a_file(tmp_path, monkeypatch):
     finally:
         await runner.cleanup()
     assert rc == 0 and all(c[2] == "good-token" for c in mock.calls)
+
+
+async def test_already_udp_account_does_not_fail_the_setup(tmp_path, monkeypatch, capsys):
+    # real-world case: the account in the web UI is already UDP, and Yemot answers SipToUdp with an error
+    acct = {"id": "086693864", "accountNumber": 1, "extensionNote": None, "password": "Pw1"}
+    mock = MockYemot(existing=[acct], noop={"SipToUdp"})
+    runner, base = await start(mock)
+    env = tmp_path / ".env"
+    monkeypatch.setenv("YEMOT_API_TOKEN", "good-token")
+    try:
+        rc = await yemot_setup.run(["--extension", "1522", "--use-account", "086693864", "--host", "sip.yemot.co.il",
+                                    "--env", str(env), "--api-base", base])
+    finally:
+        await runner.cleanup()
+    assert rc == 0 and "UpdateExtension" in [c[0] for c in mock.calls]
+    assert "already UDP" in capsys.readouterr().out and "YEMOT_SIP_PASSWORD=Pw1" in env.read_text()
+
+
+async def test_account_reported_as_udp_skips_the_transport_call(tmp_path, monkeypatch):
+    acct = {"id": "086693864", "accountNumber": 1, "extensionNote": None, "password": "Pw1",
+            "transport": "transport-udp"}
+    mock = MockYemot(existing=[acct])
+    runner, base = await start(mock)
+    monkeypatch.setenv("YEMOT_API_TOKEN", "good-token")
+    try:
+        rc = await yemot_setup.run(["--extension", "1522", "--use-account", "086693864",
+                                    "--env", str(tmp_path / ".env"), "--api-base", base])
+    finally:
+        await runner.cleanup()
+    assert rc == 0 and "SipToUdp" not in [c[0] for c in mock.calls]
+
+
+async def test_other_transport_errors_still_fail(tmp_path, monkeypatch, capsys):
+    mock = MockYemot(existing=[{"id": "086693864", "accountNumber": 1, "extensionNote": None, "password": "x"}],
+                     fail="SipToUdp")
+    runner, base = await start(mock)
+    monkeypatch.setenv("YEMOT_API_TOKEN", "good-token")
+    try:
+        rc = await yemot_setup.run(["--extension", "1522", "--use-account", "086693864",
+                                    "--env", str(tmp_path / ".env"), "--api-base", base])
+    finally:
+        await runner.cleanup()
+    assert rc == 1 and "FAILED: SipToUdp" in capsys.readouterr().out
