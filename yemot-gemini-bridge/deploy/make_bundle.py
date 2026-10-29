@@ -12,6 +12,7 @@ import argparse
 import os
 import secrets
 import stat
+import time
 import zipfile
 from pathlib import Path
 
@@ -64,6 +65,8 @@ def main() -> None:
             add(zf, name, (ROOT / name).read_bytes(), 0o644)
         add(zf, "install_all.sh", (ROOT / "deploy/bundle/install_all.sh").read_bytes(), 0o755)
         add(zf, "README_HE.txt", (ROOT / "deploy/bundle/README_HE.txt").read_bytes(), 0o644)
+        add(zf, "BUILD", f"bundle build {time.strftime('%Y-%m-%d %H:%M')}  (yemot_setup handles 'already UDP': "
+                         f"{'yes' if 'already UDP' in (ROOT / 'bridge/yemot_setup.py').read_text(encoding='utf-8') else 'NO'})\n".encode(), 0o644)
         add(zf, "bundle.conf", f'EXT="{need["EXT"]}"\nACCOUNT="{need["SIP_ACCOUNT"]}"\nSIP_HOST="{host}"\n'.encode(), 0o644)
         add(zf, ".env", env_file(need["GEMINI_API_KEY"], need["PUBLIC_IP"]).encode(), 0o600)
         add(zf, "secrets/yemot_api_token", (need["YEMOT_API_TOKEN"] + "\n").encode(), 0o600)

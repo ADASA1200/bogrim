@@ -14,6 +14,7 @@ EXTRA=()
 [ -n "${YEMOT_API_BASE:-}" ] && EXTRA+=(--api-base "$YEMOT_API_BASE")
 [ -n "${USE_EXISTING:-}" ] && EXTRA+=(--use-existing)
 
+echo "Bundle: $(cat BUILD 2>/dev/null || echo unknown)"
 echo "################ 1/3  installing the bridge service"
 BUNDLE_MODE=1 bash deploy/oracle_ubuntu_setup.sh
 
