@@ -3,16 +3,27 @@
 # Changes nothing. Passwords, keys and tokens are masked in everything it prints.
 #
 #   bash server_inventory.sh > /tmp/inventory.txt 2>&1
+#   bash server_inventory.sh quick        # short overview
 #
 mask() {
     sed -E \
         -e 's/AIza[0-9A-Za-z_-]{20,}/AIza***MASKED***/g' \
         -e 's/(sk-|ghp_|github_pat_|xox[bap]-)[0-9A-Za-z_-]{16,}/\1***MASKED***/g' \
-        -e 's/([A-Za-z_]*(KEY|PASS|PASSWORD|PWD|TOKEN|SECRET|AUTH)[A-Za-z_]*[[:space:]]*[=:][[:space:]]*).*/\1***MASKED***/I'
+        -e 's/([A-Za-z_]*(KEY|PASS|PASSWORD|PWD|TOKEN|SECRET|AUTH|CREDENTIAL)[A-Za-z_]*[[:space:]]*[=:][[:space:]]*).*/\1***MASKED***/I' \
+        -e 's#(://[^/:@[:space:]]+:)[^@/[:space:]]+@#\1***MASKED***@#g' \
+        -e 's/(Bearer|Basic)[[:space:]]+[A-Za-z0-9._~+\/=-]{12,}/\1 ***MASKED***/g' \
+        -e 's/["'"'"'][A-Za-z0-9_\/+=.-]{24,}["'"'"']/"***MASKED-LONG-STRING***"/g'
 }
 section() { printf '\n\n########## %s ##########\n' "$1"; }
 run() { printf '\n$ %s\n' "$*"; "$@" 2>&1 | mask; }
 sh_() { printf '\n$ %s\n' "$1"; bash -c "$1" 2>&1 | mask; }
+
+if [ "${1:-}" = quick ]; then   # short overview: bash server_inventory.sh quick
+    section "RUNNING SERVICES"; sh_ 'systemctl list-units --type=service --state=running --no-pager --no-legend'
+    section "OPEN PORTS"; sh_ 'sudo ss -lntup 2>/dev/null || ss -lntup'
+    section "FOLDERS"; sh_ 'ls -la /opt /home/ubuntu /srv 2>/dev/null'
+    printf '\n########## END ##########\n'; exit 0
+fi
 
 section "SYSTEM"
 sh_ 'date; uptime; hostnamectl 2>/dev/null | head -8; nproc; free -h; df -h / /opt /home 2>/dev/null'
