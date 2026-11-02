@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Read-only inventory of the server: what runs, what starts at boot, which ports are open, which code exists.
-# Changes nothing. Passwords, keys and tokens are masked in everything it prints.
+# Changes nothing. By default NOTHING is hidden (full values, so the output contains secrets: share it only with
+# whoever should see them). Run with MASK=1 to hide passwords, keys and tokens.
 #
 #   bash server_inventory.sh > /tmp/inventory.txt 2>&1
 #   bash server_inventory.sh quick        # short overview
 #
 mask() {
+    [ -n "${MASK:-}" ] || { cat; return; }
     sed -E \
         -e 's/AIza[0-9A-Za-z_-]{20,}/AIza***MASKED***/g' \
         -e 's/(sk-|ghp_|github_pat_|xox[bap]-)[0-9A-Za-z_-]{16,}/\1***MASKED***/g' \
@@ -36,7 +38,7 @@ section "SYSTEMD: FAILED"
 sh_ 'systemctl list-units --state=failed --no-pager --no-legend'
 section "SYSTEMD: ENABLED AT BOOT"
 sh_ 'systemctl list-unit-files --type=service --state=enabled --no-pager --no-legend'
-section "SYSTEMD: CUSTOM UNIT FILES (/etc/systemd/system), secrets masked"
+section "SYSTEMD: CUSTOM UNIT FILES (/etc/systemd/system)"
 sh_ 'ls -la /etc/systemd/system/*.service 2>/dev/null'
 sh_ 'for f in /etc/systemd/system/*.service; do [ -f "$f" ] && { echo "--- $f"; cat "$f"; }; done'
 section "SYSTEMD TIMERS / CRON"
@@ -63,11 +65,11 @@ sh_ 'sudo du -sh /opt/* /srv/* /home/* /var/www/* /root/* 2>/dev/null'
 section "CODE FILES: lines + sha256"
 sh_ 'sudo find /opt /srv /home /root -maxdepth 4 \( -path "*/venv/*" -o -path "*/.venv/*" -o -path "*/node_modules/*" -o -path "*/site-packages/*" -o -path "*/.cache/*" \) -prune -o \( -name "*.py" -o -name "*.js" -o -name "*.sh" -o -name "*.service" -o -name "*.ini" -o -name "*.conf" \) -type f -print 2>/dev/null | while read f; do printf "%6s lines  %s  %s\n" "$(sudo wc -l < "$f")" "$(sudo sha256sum "$f" | cut -c1-12)" "$f"; done'
 
-section "CODE FILES: first 25 lines of each .py (masked)"
+section "CODE FILES: first 25 lines of each .py"
 sh_ 'sudo find /opt /srv /home /root -maxdepth 4 \( -path "*/venv/*" -o -path "*/.venv/*" -o -path "*/site-packages/*" -o -path "*/.cache/*" \) -prune -o -name "*.py" -type f -print 2>/dev/null | head -60 | while read f; do echo; echo "=== $f"; sudo head -25 "$f"; done'
 
-section "ENV FILES (names of settings only, values hidden)"
-sh_ 'for f in $(sudo find /opt /srv /home /root -maxdepth 3 -name ".env*" -type f 2>/dev/null); do echo "--- $f"; sudo grep -vE "^\s*#|^\s*$" "$f" | cut -d= -f1; done'
+section "ENV FILES (full content)"
+sh_ 'for f in $(sudo find /opt /srv /home /root -maxdepth 3 -name ".env*" -type f 2>/dev/null); do echo "--- $f"; sudo grep -vE "^\s*#|^\s*$" "$f"; done'
 
 section "PYTHON PACKAGES per venv (names + versions)"
 sh_ 'for v in $(sudo find /opt /srv /home -maxdepth 3 -type d -name venv 2>/dev/null); do echo "--- $v"; sudo $v/bin/pip list --format=freeze 2>/dev/null | head -40; done'
