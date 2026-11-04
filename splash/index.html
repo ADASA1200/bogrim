@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>אוצר החכמה</title>
+<style>
+  @font-face {
+    font-family: "FrankSplash";
+    src: url("assets/frank-ruhl-hebrew.woff2") format("woff2");
+    font-weight: 300 900;
+    unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+  }
+  @font-face {
+    font-family: "FrankSplash";
+    src: url("assets/frank-ruhl-latin.woff2") format("woff2");
+    font-weight: 300 900;
+    unicode-range: U+0000-00FF, U+2000-206F;
+  }
+  html, body { margin: 0; height: 100%; background: #140c05; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; object-fit: cover; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+(() => {
+  const W = 1920, H = 1080;
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d");
+  const img = new Image();
+  img.src = "assets/library.jpg";
+
+  const TITLE = "אוצר החכמה";
+  const SUBTITLE = "עם מעל 156,000 ספרים";
+  const P = 18;              // loop period of the scholars (seconds)
+  const INTRO = 13;          // camera move length (seconds)
+
+  // ---------- helpers ----------
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const ease = t => (t = clamp(t, 0, 1), t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  const seg = (t, a, b) => clamp((t - a) / (b - a), 0, 1);
+  const mod = (a, n) => ((a % n) + n) % n;
+  function rand(i) { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+
+  // perspective of the room in image coordinates (image is 2000 x 1598)
+  const FIG = 1.15;   // figure scale: tiny people against the enormous library
+  const floorY = x => 960 - 0.17 * x;
+  const scaleAt = x => 1 - 0.4 * x / 1500;
+
+  // ---------- camera: panoramic sweep from high up, pulling back to the full hall ----------
+  const camKeys = [
+    { t: 0,   cx: 330,  cy: 250, w: 860 },
+    { t: 5.5, cx: 1050, cy: 330, w: 1150 },
+    { t: 10,  cx: 1300, cy: 520, w: 1500 },
+    { t: INTRO, cx: 1000, cy: 640, w: 1990 },
+  ];
+  function camera(t) {
+    if (t >= INTRO) {
+      const k = camKeys[camKeys.length - 1];
+      const d = Math.sin((t - INTRO) * 0.25) * 6;  // gentle breathing drift
+      return { cx: k.cx + d, cy: k.cy, w: k.w - 4 + Math.cos((t - INTRO) * 0.2) * 4 };
+    }
+    let i = 0;
+    while (i < camKeys.length - 2 && t > camKeys[i + 1].t) i++;
+    const a = camKeys[i], b = camKeys[i + 1];
+    const p = ease(seg(t, a.t, b.t));
+    return { cx: lerp(a.cx, b.cx, p), cy: lerp(a.cy, b.cy, p), w: lerp(a.w, b.w, p) };
+  }
+
+  // ---------- drawing primitives ----------
+  const COAT = "#110b07", HAT = "#050302", SKIN = "#b88a63", SHIRT = "#d9cfbd", BEARD = "#1b120b";
+  const RIM = "rgba(255,185,100,0.55)";
+
+  function limb(x1, y1, x2, y2, bend, w, color) {
+    const mx = (x1 + x2) / 2 + bend, my = (y1 + y2) / 2;
+    ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke();
+  }
+
+  function drawBook(b) {
+    ctx.save();
+    ctx.translate(b.x, b.y); ctx.rotate(b.rot || 0);
+    if (b.open) {
+      const o = b.open;  // 0..1
+      ctx.fillStyle = "#5a1810";
+      ctx.fillRect(-9 * o - 1, -7, 18 * o + 2, 14);
+      ctx.fillStyle = "#e8dcc0";
+      ctx.fillRect(-8.5 * o, -6.4, 8.3 * o, 12.8);
+      ctx.fillStyle = "#d8c9a8";
+      ctx.fillRect(0.2, -6.4, 8.3 * o, 12.8);
+      ctx.strokeStyle = "rgba(60,40,20,.5)"; ctx.lineWidth = .4;
+      for (let k = -4; k <= 4; k += 2) {
+        ctx.beginPath(); ctx.moveTo(-7.5 * o, k); ctx.lineTo(-1.2, k); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(1.2, k); ctx.lineTo(7.5 * o, k); ctx.stroke();
+      }
+      if (b.flip != null) {  // page turning
+        const f = b.flip;
+        const px = Math.cos(f * Math.PI) * 8.3;
+        ctx.fillStyle = "#f2e8d0";
+        ctx.beginPath(); ctx.moveTo(0, -6.4); ctx.lineTo(px, -6.4 - Math.sin(f * Math.PI) * 3);
+        ctx.lineTo(px, 6.4 - Math.sin(f * Math.PI) * 3); ctx.lineTo(0, 6.4); ctx.closePath(); ctx.fill();
+      }
+    } else {
+      ctx.fillStyle = "#6b1d12"; ctx.fillRect(-2.6, -7, 5.2, 14);
+      ctx.fillStyle = "#d9a64a";
+      ctx.fillRect(-2.6, -5, 5.2, .7); ctx.fillRect(-2.6, 4.3, 5.2, .7); ctx.fillRect(-1, -2, 2, 3);
+    }
+    ctx.restore();
+  }
+
+  // pose units: figure is ~106 units tall, feet at (0,0), up is negative
+  function drawScholar(p) {
+    if (p.alpha <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = p.alpha;
+    ctx.translate(p.x, p.y);
+    ctx.scale(p.s * (p.dir || 1), p.s);
+    // floor shadow
+    if (!p.noShadow) {
+      ctx.fillStyle = "rgba(0,0,0,.45)";
+      ctx.beginPath(); ctx.ellipse(0, 1, 16, 3, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.rotate(p.sway || 0);
+    const back = p.view === "back";
+    const lL = p.legL || [0, 0], lR = p.legR || [0, 0];
+    // legs
+    limb(-4, -44, -4 + lL[0], lL[1], 0, 5.5, "#0a0604");
+    limb(4, -44, 4 + lR[0], lR[1], 0, 5.5, "#0a0604");
+    ctx.fillStyle = "#020101";
+    ctx.beginPath(); ctx.ellipse(-4 + lL[0] - 1, lL[1] - 1, 4, 1.8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(4 + lR[0] + 1, lR[1] - 1, 4, 1.8, 0, 0, Math.PI * 2); ctx.fill();
+    // long coat with rim light
+    ctx.save();
+    ctx.shadowColor = "rgba(255,160,70,.35)"; ctx.shadowBlur = 10;
+    ctx.fillStyle = COAT;
+    ctx.beginPath();
+    ctx.moveTo(-10, -81); ctx.quadraticCurveTo(-13, -79, -13.5, -70);
+    ctx.lineTo(-15, -20); ctx.quadraticCurveTo(0, -17, 15, -20);
+    ctx.lineTo(13.5, -70); ctx.quadraticCurveTo(13, -79, 10, -81); ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = RIM; ctx.lineWidth = .9;
+    ctx.beginPath(); ctx.moveTo(10, -81); ctx.quadraticCurveTo(13, -79, 13.5, -70); ctx.lineTo(15, -20); ctx.stroke();
+    // tzitzit strings
+    ctx.strokeStyle = "rgba(225,215,195,.75)"; ctx.lineWidth = .5;
+    for (const sx of [-13.5, 13.5]) for (let k = 0; k < 3; k++) {
+      ctx.beginPath(); ctx.moveTo(sx + (k - 1) * .7, -48); ctx.lineTo(sx + (k - 1) * 1.1, -36 + k); ctx.stroke();
+    }
+    if (!back) {
+      // shirt + coat lapels
+      ctx.fillStyle = SHIRT;
+      ctx.beginPath(); ctx.moveTo(-3.5, -81); ctx.lineTo(3.5, -81); ctx.lineTo(0, -67); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "rgba(255,200,130,.25)"; ctx.lineWidth = .6;
+      ctx.beginPath(); ctx.moveTo(0, -67); ctx.lineTo(0, -22); ctx.stroke();
+    }
+    // arms
+    const shL = [-11, -77], shR = [11, -77];
+    const hL = p.handL || [-13, -48], hR = p.handR || [13, -48];
+    limb(shL[0], shL[1], hL[0], hL[1], -3, 5.2, COAT);
+    limb(shR[0], shR[1], hR[0], hR[1], 3, 5.2, COAT);
+    ctx.fillStyle = SKIN;
+    ctx.beginPath(); ctx.arc(hL[0], hL[1], 1.9, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(hR[0], hR[1], 1.9, 0, Math.PI * 2); ctx.fill();
+    if (p.bookBehind && p.book) drawBook(p.book);
+    // head
+    ctx.fillStyle = back ? "#0d0805" : SKIN;
+    ctx.beginPath(); ctx.ellipse(0, -87, 6, 7, 0, 0, Math.PI * 2); ctx.fill();
+    if (!back) {
+      ctx.fillStyle = BEARD;
+      ctx.beginPath();
+      ctx.moveTo(-6, -87); ctx.quadraticCurveTo(-6.5, -77, 0, -73);
+      ctx.quadraticCurveTo(6.5, -77, 6, -87); ctx.quadraticCurveTo(0, -81, -6, -87); ctx.fill();
+      ctx.fillStyle = "rgba(20,10,5,.8)";
+      ctx.fillRect(-3.4, -89.4, 2, .8); ctx.fillRect(1.4, -89.4, 2, .8);
+      // peyot
+      ctx.strokeStyle = BEARD; ctx.lineWidth = 1.1;
+      ctx.beginPath(); ctx.moveTo(-6, -88); ctx.quadraticCurveTo(-8, -83, -6.5, -79); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(6, -88); ctx.quadraticCurveTo(8, -83, 6.5, -79); ctx.stroke();
+    }
+    // hat
+    ctx.fillStyle = HAT;
+    ctx.beginPath(); ctx.ellipse(0, -93.5, 12, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-6.8, -93.5); ctx.lineTo(-6.2, -104); ctx.quadraticCurveTo(0, -106.5, 6.2, -104); ctx.lineTo(6.8, -93.5);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = RIM; ctx.lineWidth = .7;
+    ctx.beginPath(); ctx.moveTo(6.2, -104); ctx.lineTo(6.8, -93.5); ctx.lineTo(12, -93.5); ctx.stroke();
+    ctx.strokeStyle = "rgba(80,60,40,.6)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(-6.6, -95.5); ctx.lineTo(6.6, -95.5); ctx.stroke();
+    if (!p.bookBehind && p.book) drawBook(p.book);
+    ctx.restore();
+  }
+
+  function drawLadder(L) {
+    const { bx, by, tx, ty, s } = L;
+    const hw = 9 * s;
+    ctx.save();
+    ctx.shadowColor = "rgba(255,170,80,.3)"; ctx.shadowBlur = 8;
+    ctx.strokeStyle = "#3a2211"; ctx.lineWidth = 3.2 * s; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(bx - hw * 1.15, by); ctx.lineTo(tx - hw, ty);
+    ctx.moveTo(bx + hw * 1.15, by); ctx.lineTo(tx + hw, ty); ctx.stroke();
+    ctx.restore();
+    const n = Math.floor((by - ty) / (14 * s));
+    ctx.strokeStyle = "#4a2c15"; ctx.lineWidth = 1.8 * s;
+    for (let i = 1; i <= n; i++) {
+      const f = i / (n + .3);
+      const y = lerp(by, ty, f), x = lerp(bx, tx, f), w = lerp(hw * 1.15, hw, f);
+      ctx.beginPath(); ctx.moveTo(x - w, y); ctx.lineTo(x + w, y); ctx.stroke();
+    }
+    ctx.strokeStyle = "rgba(255,200,120,.35)"; ctx.lineWidth = .8 * s;
+    ctx.beginPath(); ctx.moveTo(bx + hw * 1.15 + 1.2 * s, by); ctx.lineTo(tx + hw + 1.2 * s, ty); ctx.stroke();
+    // top hook onto the shelf rail
+    ctx.strokeStyle = "#b8893f"; ctx.lineWidth = 1.2 * s;
+    ctx.beginPath(); ctx.arc(tx - hw, ty - 2 * s, 2 * s, Math.PI * .5, Math.PI * 1.5, true); ctx.stroke();
+    ctx.beginPath(); ctx.arc(tx + hw, ty - 2 * s, 2 * s, Math.PI * .5, Math.PI * 1.5, true); ctx.stroke();
+  }
+
+  function drawShelfGap(x, y, s) {
+    ctx.fillStyle = "rgba(8,4,2,.92)";
+    ctx.fillRect(x - 3 * s, y - 7 * s, 6 * s, 14 * s);
+  }
+
+  function drawShtender(x, y, s) {
+    ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+    ctx.fillStyle = "rgba(0,0,0,.45)";
+    ctx.beginPath(); ctx.ellipse(0, 1, 14, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowColor = "rgba(255,160,70,.3)"; ctx.shadowBlur = 8;
+    ctx.fillStyle = "#2b170a";
+    ctx.fillRect(-12, -3, 24, 3);           // base
+    ctx.fillRect(-3, -58, 6, 56);           // post
+    ctx.beginPath();                         // slanted desk
+    ctx.moveTo(-15, -56); ctx.lineTo(15, -56); ctx.lineTo(13, -66); ctx.lineTo(-13, -66); ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "rgba(230,170,90,.45)"; ctx.lineWidth = .7;
+    ctx.beginPath(); ctx.moveTo(-13, -66); ctx.lineTo(13, -66); ctx.stroke();
+    ctx.restore();
+  }
+
+  // ---------- scholars ----------
+  function walkLegs(ph) {
+    const a = Math.sin(ph) * 5, b = Math.max(0, Math.cos(ph)) * -2.2, c = Math.max(0, -Math.cos(ph)) * -2.2;
+    return { legL: [a, b], legR: [-a, c] };
+  }
+
+  function makeLadderScholar(o) {
+    const s = FIG * scaleAt(o.bx);           // px per unit
+    const by = floorY(o.bx);
+    const ladder = { bx: o.bx, by: by + 2, tx: o.bx + 6 * s, ty: by - o.ladderH, s };
+    const climbPx = o.ladderH - 64 * s;
+    const spot = { x: ladder.tx + o.side * 22 * s, y: by - climbPx - 86 * s };
+    return {
+      ladder, spot,
+      pose(T) {
+        const t = mod(T + o.offset, P);
+        let x = o.bx, y = by, view = "front", alpha = 1, legs = { legL: [0, 0], legR: [0, 0] };
+        let hL, hR, book = null, sway = 0, bookOut = false, dir = 1, bookBehind = false;
+        const climbArms = (ph) => {
+          hL = [-8, -104 + Math.sin(ph) * 4]; hR = [8, -104 - Math.sin(ph) * 4];
+        };
+        const along = (py) => lerp(o.bx, ladder.tx, (by - py) / (by - ladder.ty));
+        if (t < 2) {                                  // walk in
+          const p = t / 2;
+          x = lerp(o.bx - 110 * s, o.bx, ease(p) * .9 + p * .1);
+          legs = walkLegs(t * 7); alpha = clamp(t / .6, 0, 1);
+          dir = 1;
+        } else if (t < 5) {                           // climb up
+          const p = ease(seg(t, 2, 5)); view = "back";
+          y = by - p * climbPx; x = along(y) ;
+          const ph = p * 16; legs = { legL: [0, -Math.max(0, Math.sin(ph)) * 6], legR: [0, -Math.max(0, -Math.sin(ph)) * 6] };
+          climbArms(ph);
+        } else if (t < 10) {                          // at the top: take, read, return
+          view = "back"; y = by - climbPx; x = along(y);
+          climbArms(0);
+          const reachTo = [ (spot.x - x) / s, (spot.y - y) / s ];
+          const handIdle = o.side > 0 ? hR : hL;
+          const setHand = h => { if (o.side > 0) hR = h; else hL = h; };
+          if (t < 5.8) {
+            const p = ease(seg(t, 5, 5.6)); setHand([lerp(handIdle[0], reachTo[0], p), lerp(handIdle[1], reachTo[1], p)]);
+            bookOut = t > 5.6;
+            if (bookOut) book = { x: reachTo[0], y: reachTo[1] };
+          } else if (t < 9.2) {
+            bookOut = true;
+            const p = ease(seg(t, 5.8, 6.4)), q = ease(seg(t, 8.7, 9.2));
+            const read = [o.side * 12, -80];
+            const hp = [lerp(reachTo[0], read[0], p - q), lerp(reachTo[1], read[1], p - q)];
+            setHand(hp);
+            book = { x: hp[0] + o.side * 2, y: hp[1] - 2, open: clamp((p - q) * 1.4 - .2, 0, 1) || undefined, rot: o.side * .25 };
+            sway = Math.sin((t - 5.8) * 3.2) * .02;
+            bookBehind = true;
+          } else {
+            const p = ease(seg(t, 9.2, 9.8));
+            setHand([lerp(reachTo[0], handIdle[0], p), lerp(reachTo[1], handIdle[1], p)]);
+            bookOut = p < .3;
+            if (bookOut) book = { x: reachTo[0], y: reachTo[1] };
+          }
+        } else if (t < 13) {                          // climb down
+          const p = ease(seg(t, 10, 13)); view = "back";
+          y = by - (1 - p) * climbPx; x = along(y);
+          const ph = p * 16; legs = { legL: [0, -Math.max(0, Math.sin(ph)) * 6], legR: [0, -Math.max(0, -Math.sin(ph)) * 6] };
+          climbArms(ph);
+        } else if (t < 15.6) {                        // walk away
+          const p = seg(t, 13, 15.6);
+          x = o.bx + p * 130 * s; legs = walkLegs(t * 7); alpha = 1 - seg(t, 15, 15.6);
+        } else alpha = 0;
+        return { x, y, s, view, alpha, dir, sway, handL: hL, handR: hR, book, bookBehind, bookOut, noShadow: y < by - 4, ...legs };
+      }
+    };
+  }
+
+  function makeBrowser(o) {   // walks along the low shelves, pulls a book, studies standing, returns it
+    const s = FIG * scaleAt(o.x);
+    const by = floorY(o.x);
+    const spot = { x: o.x + 4 * s, y: by - 70 * s };
+    return {
+      spot,
+      pose(T) {
+        const t = mod(T + o.offset, P);
+        let x = o.x, alpha = 1, view = "front", legs = { legL: [0, 0], legR: [0, 0] };
+        let hL, hR, book = null, bookOut = false, sway = 0;
+        const reach = [(spot.x - o.x) / s, (spot.y - by) / s];
+        if (t < 2.5) {
+          x = lerp(o.x - 140 * s, o.x, ease(t / 2.5) * .85 + t / 2.5 * .15);
+          legs = walkLegs(t * 7); alpha = clamp(t / .6, 0, 1);
+        } else if (t < 3.6) {
+          view = "back";
+          const p = ease(seg(t, 2.5, 3.1)), q = ease(seg(t, 3.2, 3.6));
+          hR = [lerp(13, reach[0], p - q * .0), lerp(-48, reach[1], p)];
+          bookOut = t > 3.1;
+          if (bookOut) { hR = [lerp(reach[0], 9, q), lerp(reach[1], -62, q)]; book = { x: hR[0], y: hR[1] }; }
+        } else if (t < 9.4) {
+          bookOut = true;
+          const p = ease(seg(t, 3.6, 4.2)), q = ease(seg(t, 8.9, 9.4));
+          const o2 = clamp(p - q, 0, 1);
+          hL = [-9, -58]; hR = [9, -58];
+          const flipT = mod(t - 4.2, 2.4) / .6;
+          book = { x: 0, y: -60, open: o2 || undefined, flip: (t > 4.4 && t < 8.6 && flipT < 1) ? flipT : null, rot: 0 };
+          sway = Math.sin((t - 3.6) * 3.4) * .035;
+        } else if (t < 10.4) {
+          view = "back";
+          const p = ease(seg(t, 9.4, 9.9)), q = ease(seg(t, 9.9, 10.4));
+          hR = [lerp(9, reach[0], p), lerp(-62, reach[1], p)];
+          bookOut = p < 1;
+          if (bookOut) book = { x: hR[0], y: hR[1] };
+          if (q > 0) hR = [lerp(reach[0], 13, q), lerp(reach[1], -48, q)];
+        } else if (t < 13.5) {
+          const p = seg(t, 10.4, 13.5);
+          x = o.x + p * 150 * s; legs = walkLegs(t * 7); alpha = 1 - seg(t, 12.9, 13.5);
+        } else alpha = 0;
+        return { x, y: by, s, view, alpha, sway, handL: hL, handR: hR, book, bookOut, ...legs };
+      }
+    };
+  }
+
+  function makeLearner(o) {   // standing at a shtender, swaying, turning pages
+    const s = FIG * scaleAt(o.x);
+    const by = floorY(o.x);
+    return {
+      draw(T) {
+        const t = T + o.offset;
+        const sway = Math.sin(t * 2.9) * .045;
+        const flipT = mod(t, 5) / .7;
+        // learner stands behind the shtender, facing us
+        drawScholar({
+          x: o.x, y: by - 6 * s, s, view: "front", alpha: 1, sway,
+          handL: [-11, -63 + Math.sin(t * 2.9) * .5], handR: [11, -63], legL: [0, 0], legR: [0, 0],
+        });
+        drawShtender(o.x, by + 4 * s, s);
+        ctx.save(); ctx.translate(o.x, by + 4 * s); ctx.scale(s, s);
+        drawBook({ x: 0, y: -69, open: 1, flip: flipT < 1 ? flipT : null, rot: 0 });
+        ctx.restore();
+      }
+    };
+  }
+
+  const ladderA = makeLadderScholar({ bx: 380, ladderH: 600, side: -1, offset: 0 });
+  const ladderB = makeLadderScholar({ bx: 1130, ladderH: 430, side: 1, offset: 7.5 });
+  const ladderC = makeLadderScholar({ bx: 1460, ladderH: 360, side: -1, offset: 12 });
+  const ladderD = makeLadderScholar({ bx: 760, ladderH: 520, side: 1, offset: 3.5 });
+  const ladderE = makeLadderScholar({ bx: 120, ladderH: 680, side: 1, offset: 9.5 });
+  const browsers = [makeBrowser({ x: 560, offset: 4 }), makeBrowser({ x: 1010, offset: 11 })];
+  const learners = [[820, 0], [1330, 1.7], [300, 3.1], [1210, 4.4]].map(([x, offset]) => ({ x, l: makeLearner({ x, offset }) }));
+
+  // ---------- atmosphere ----------
+  const sconces = [[632, 312], [708, 312], [1000, 362], [1060, 362], [1240, 392], [1282, 392], [1405, 422], [1440, 422]];
+  function candleGlow(t) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    sconces.forEach(([x, y], i) => {
+      const f = .75 + .25 * Math.sin(t * 9 + i * 2.1) * Math.sin(t * 5.3 + i);
+      const r = 70 * scaleAt(x) * (1.6 - i * .06);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, `rgba(255,210,140,${.35 * f})`);
+      g.addColorStop(.35, `rgba(255,150,60,${.12 * f})`);
+      g.addColorStop(1, "rgba(255,120,40,0)");
+      ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    });
+    ctx.restore();
+  }
+
+  function lightRays(t) {
+    ctx.save(); ctx.globalCompositeOperation = "screen";
+    const ox = 1240, oy = -60;
+    for (let i = 0; i < 6; i++) {
+      const a = 1.95 + i * .12 + Math.sin(t * .3 + i) * .015;
+      const len = 1500, spread = .035 + rand(i) * .03;
+      const a1 = .05 + .03 * Math.sin(t * .7 + i * 1.7);
+      const g = ctx.createLinearGradient(ox, oy, ox + Math.cos(a) * len, oy + Math.sin(a) * len);
+      g.addColorStop(0, `rgba(255,215,150,${a1})`); g.addColorStop(1, "rgba(255,200,120,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.moveTo(ox, oy);
+      ctx.lineTo(ox + Math.cos(a - spread) * len, oy + Math.sin(a - spread) * len);
+      ctx.lineTo(ox + Math.cos(a + spread) * len, oy + Math.sin(a + spread) * len);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function dust(t) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 140; i++) {
+      const bx = 500 + rand(i) * 1500, by = rand(i + 99) * 900;
+      const x = bx + Math.sin(t * .3 + i) * 30 - t * 6 * rand(i + 7);
+      const y = mod(by + t * (8 + rand(i + 3) * 10), 950);
+      const tw = .5 + .5 * Math.sin(t * 2 + i * 3);
+      const r = .8 + rand(i + 5) * 1.8;
+      ctx.fillStyle = `rgba(255,220,160,${.25 * tw})`;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ---------- title ----------
+  const titleLayer = document.createElement("canvas");
+  titleLayer.width = W; titleLayer.height = H;
+  const tctx = titleLayer.getContext("2d");
+
+  function drawTitle(t) {
+    const t0 = 9.6;
+    const a = ease(seg(t, t0, t0 + 2));
+    if (a <= 0) return;
+    const sub = ease(seg(t, t0 + 1.4, t0 + 3));
+    const cx = W / 2, ty = 870, sy = 975;
+    tctx.clearRect(0, 0, W, H);
+    tctx.save();
+    tctx.direction = "rtl"; tctx.textAlign = "center"; tctx.textBaseline = "alphabetic";
+
+    // soft dark plate (on the main canvas) to keep the text readable
+    ctx.save();
+    ctx.translate(cx, 920); ctx.scale(1, .38);
+    const plate = ctx.createRadialGradient(0, 0, 10, 0, 0, 900);
+    plate.addColorStop(0, `rgba(10,5,2,${.6 * a})`); plate.addColorStop(1, "rgba(10,5,2,0)");
+    ctx.fillStyle = plate; ctx.fillRect(-W, -1200, W * 2, 2400);
+    ctx.restore();
+
+    // main title
+    const size = 150;
+    tctx.font = `900 ${size}px FrankSplash, "Frank Ruhl Libre", serif`;
+    const scale = lerp(1.08, 1, a);
+    tctx.translate(cx, ty + (1 - a) * 25); tctx.scale(scale, scale);
+    tctx.globalAlpha = a;
+    tctx.shadowColor = "rgba(255,170,60,.55)"; tctx.shadowBlur = 40;
+    const g = tctx.createLinearGradient(0, -size, 0, 10);
+    g.addColorStop(0, "#fff4cf"); g.addColorStop(.45, "#f0c463"); g.addColorStop(.75, "#b7792a"); g.addColorStop(1, "#7a4a14");
+    tctx.fillStyle = g;
+    tctx.fillText(TITLE, 0, 0);
+    tctx.shadowBlur = 0;
+    tctx.lineWidth = 1.2; tctx.strokeStyle = "rgba(255,236,190,.55)";
+    tctx.strokeText(TITLE, 0, 0);
+    // moving shine across the letters
+    const sh = mod((t - t0 - 1.2) / 4.5, 1);
+    tctx.globalCompositeOperation = "source-atop";
+    const shx = lerp(-700, 700, sh);
+    const sg = tctx.createLinearGradient(shx - 120, -size, shx + 120, 0);
+    sg.addColorStop(0, "rgba(255,255,255,0)"); sg.addColorStop(.5, "rgba(255,255,240,.75)"); sg.addColorStop(1, "rgba(255,255,255,0)");
+    tctx.fillStyle = sg; tctx.fillRect(-800, -size - 20, 1600, size + 60);
+    tctx.restore();
+
+    // subtitle with ornaments
+    if (sub > 0) {
+      tctx.save();
+      tctx.globalAlpha = sub;
+      tctx.direction = "rtl"; tctx.textAlign = "center";
+      tctx.font = `500 58px FrankSplash, "Frank Ruhl Libre", serif`;
+      tctx.shadowColor = "rgba(0,0,0,.8)"; tctx.shadowBlur = 12;
+      tctx.fillStyle = "#f3dfb1";
+      tctx.fillText(SUBTITLE, cx, sy + (1 - sub) * 15);
+      tctx.shadowBlur = 0;
+      const tw = tctx.measureText(SUBTITLE).width / 2 + 40;
+      const lw = 220 * sub;
+      const lg = (x1, x2) => { const gg = tctx.createLinearGradient(x1, 0, x2, 0); gg.addColorStop(0, "rgba(230,180,90,0)"); gg.addColorStop(1, "rgba(230,180,90,.9)"); return gg; };
+      tctx.lineWidth = 2;
+      tctx.strokeStyle = lg(cx - tw - lw, cx - tw);
+      tctx.beginPath(); tctx.moveTo(cx - tw - lw, sy - 20); tctx.lineTo(cx - tw, sy - 20); tctx.stroke();
+      tctx.strokeStyle = lg(cx + tw + lw, cx + tw);
+      tctx.beginPath(); tctx.moveTo(cx + tw + lw, sy - 20); tctx.lineTo(cx + tw, sy - 20); tctx.stroke();
+      tctx.fillStyle = "#e9b85c";
+      for (const dx of [-tw, tw]) {
+        tctx.save(); tctx.translate(cx + dx, sy - 20); tctx.rotate(Math.PI / 4); tctx.fillRect(-5, -5, 10, 10); tctx.restore();
+      }
+      tctx.restore();
+    }
+    ctx.drawImage(titleLayer, 0, 0);
+  }
+
+  // ---------- frame ----------
+  function render(t) {
+    const cam = camera(t);
+    const vh = cam.w * H / W;   // keep the view inside the picture
+    cam.cx = clamp(cam.cx, cam.w / 2, 2000 - cam.w / 2);
+    cam.cy = clamp(cam.cy, vh / 2, 1598 - vh / 2);
+    const sc = W / cam.w;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = "#140c05"; ctx.fillRect(0, 0, W, H);
+    ctx.setTransform(sc, 0, 0, sc, W / 2 - cam.cx * sc, H / 2 - cam.cy * sc);
+
+    if (img.complete && img.naturalWidth) ctx.drawImage(img, 0, 0);
+    candleGlow(t);
+
+    const ladders = [ladderA, ladderB, ladderC, ladderD, ladderE];
+    const poses = ladders.map(l => l.pose(t));
+    const bps = browsers.map(b => b.pose(t));
+    // missing books on shelves
+    ladders.forEach((l, i) => { if (poses[i].bookOut) drawShelfGap(l.spot.x, l.spot.y, l.ladder.s); });
+    browsers.forEach((b, i) => { if (bps[i].bookOut) drawShelfGap(b.spot.x, b.spot.y, bps[i].s); });
+
+    // far to near (smaller scale = farther)
+    const items = [
+      ...ladders.map((l, i) => ({ s: l.ladder.s, draw: () => { drawLadder(l.ladder); drawScholar(poses[i]); } })),
+      ...bps.map(bp => ({ s: bp.s, draw: () => drawScholar(bp) })),
+      ...learners.map(({ x, l }) => ({ s: FIG * scaleAt(x), draw: () => l.draw(t) })),
+    ].sort((a, b) => a.s - b.s);
+    items.forEach(it => it.draw());
+
+    lightRays(t);
+    dust(t);
+
+    // screen-space grading
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const v = ctx.createRadialGradient(W / 2, H * .45, H * .35, W / 2, H * .5, W * .75);
+    v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,.6)");
+    ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+    const fadeIn = 1 - seg(t, 0, 1.2);
+    if (fadeIn > 0) { ctx.fillStyle = `rgba(0,0,0,${fadeIn})`; ctx.fillRect(0, 0, W, H); }
+
+    drawTitle(t);
+  }
+
+  // ---------- run ----------
+  const ready = Promise.all([
+    new Promise(r => { if (img.complete) r(); else { img.onload = r; img.onerror = r; } }),
+    document.fonts.load(`900 100px FrankSplash`, TITLE),
+    document.fonts.load(`500 50px FrankSplash`, SUBTITLE),
+  ]);
+  window.splashReady = ready;
+  window.renderAt = render;
+
+  const capture = new URLSearchParams(location.search).has("capture");
+  if (!capture) {
+    ready.then(() => {
+      const start = performance.now();
+      const loop = now => { render((now - start) / 1000); requestAnimationFrame(loop); };
+      requestAnimationFrame(loop);
+    });
+  }
+})();
+</script>
+</body>
+</html>
