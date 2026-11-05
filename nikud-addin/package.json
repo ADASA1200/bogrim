@@ -1,0 +1,22 @@
+{
+  "name": "nikud-kal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "תוסף Word לניקוד טקסט עברי לפי מילון משתמש",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "certs": "office-addin-dev-certs install",
+    "start": "http-server . -p 3000 -S -C \"$HOME/.office-addin-dev-certs/localhost.crt\" -K \"$HOME/.office-addin-dev-certs/localhost.key\" -c-1",
+    "sideload": "office-addin-debugging start manifest.xml desktop --no-debug",
+    "stop": "office-addin-debugging stop manifest.xml",
+    "validate": "office-addin-manifest validate manifest.xml",
+    "build:starter": "node scripts/build-starter.mjs"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1",
+    "office-addin-debugging": "^5.1.6",
+    "office-addin-dev-certs": "^1.13.5",
+    "office-addin-manifest": "^1.13.6"
+  }
+}
