@@ -1,0 +1,94 @@
+{
+  "actions": [
+    {
+      "id": "autoNikud",
+      "type": "ExecuteFunction",
+      "name": "ניקוד אוטומטי"
+    },
+    {
+      "id": "singleWord",
+      "type": "ExecuteFunction",
+      "name": "מילה בודדת"
+    },
+    {
+      "id": "manualNikud",
+      "type": "ExecuteFunction",
+      "name": "ניקוד ידני"
+    },
+    {
+      "id": "verseNikud",
+      "type": "ExecuteFunction",
+      "name": "ניקוד פסוקים"
+    },
+    {
+      "id": "removeNikud",
+      "type": "ExecuteFunction",
+      "name": "מחק ניקוד"
+    },
+    {
+      "id": "addToDictionary",
+      "type": "ExecuteFunction",
+      "name": "הוסף מילים למילון"
+    },
+    {
+      "id": "openDictionary",
+      "type": "ExecuteFunction",
+      "name": "מילון"
+    },
+    {
+      "id": "openSettings",
+      "type": "ExecuteFunction",
+      "name": "הגדרות"
+    }
+  ],
+  "shortcuts": [
+    {
+      "action": "autoNikud",
+      "key": {
+        "default": "F5"
+      }
+    },
+    {
+      "action": "singleWord",
+      "key": {
+        "default": "F6"
+      }
+    },
+    {
+      "action": "manualNikud",
+      "key": {
+        "default": "F7"
+      }
+    },
+    {
+      "action": "verseNikud",
+      "key": {
+        "default": "F8"
+      }
+    },
+    {
+      "action": "removeNikud",
+      "key": {
+        "default": "Ctrl+Shift+Delete"
+      }
+    },
+    {
+      "action": "addToDictionary",
+      "key": {
+        "default": "Ctrl+Shift+Insert"
+      }
+    },
+    {
+      "action": "openDictionary",
+      "key": {
+        "default": "Ctrl+Shift+D"
+      }
+    },
+    {
+      "action": "openSettings",
+      "key": {
+        "default": "Ctrl+Shift+S"
+      }
+    }
+  ]
+}

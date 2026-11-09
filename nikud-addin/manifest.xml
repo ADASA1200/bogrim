@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- מניפסט של תוסף Word. לפריסה אמיתית, להחליף את https://localhost:3000 בכתובת השרת. -->
+<!-- נוצר על ידי scripts/build-manifest.mjs. לא לערוך ידנית. -->
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
            xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
            xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
            xsi:type="TaskPaneApp">
   <Id>f585020a-505d-455a-a72b-7872291e5611</Id>
-  <Version>1.0.0.0</Version>
+  <Version>1.1.0.0</Version>
   <ProviderName>Nikud Kal</ProviderName>
   <DefaultLocale>he-IL</DefaultLocale>
   <DisplayName DefaultValue="ניקוד קל"/>
-  <Description DefaultValue="ניקוד מסמכי Word לפי מילון שאתם בונים, מילה אחרי מילה או בהרצה על כל המסמך."/>
+  <Description DefaultValue="ניקוד מסמכי Word לפי מילון שאתם בונים, ניקוד פסוקים לפי התנ&quot;ך, וכפתורי ניקוד וטעמים."/>
   <IconUrl DefaultValue="https://localhost:3000/assets/icon-32.png"/>
   <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-64.png"/>
   <SupportUrl DefaultValue="https://localhost:3000/README.md"/>
@@ -29,68 +29,365 @@
     <SourceLocation DefaultValue="https://localhost:3000/src/taskpane.html"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
-
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Requirements>
+      <bt:Sets DefaultMinVersion="1.1">
+        <bt:Set Name="SharedRuntime" MinVersion="1.1"/>
+      </bt:Sets>
+    </Requirements>
     <Hosts>
       <Host xsi:type="Document">
+        <Runtimes>
+          <Runtime resid="Taskpane.Url" lifetime="long"/>
+        </Runtimes>
         <DesktopFormFactor>
           <GetStarted>
             <Title resid="GetStarted.Title"/>
             <Description resid="GetStarted.Description"/>
             <LearnMoreUrl resid="Readme.Url"/>
           </GetStarted>
-          <FunctionFile resid="Commands.Url"/>
+          <FunctionFile resid="Taskpane.Url"/>
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
-            <OfficeTab id="TabHome">
-              <Group id="NikudKal.Group">
-                <Label resid="Group.Label"/>
-                <Icon>
-                  <bt:Image size="16" resid="Icon.16"/>
-                  <bt:Image size="32" resid="Icon.32"/>
-                  <bt:Image size="80" resid="Icon.80"/>
-                </Icon>
-                <Control xsi:type="Button" id="NikudKal.ShowPane">
-                  <Label resid="Button.Label"/>
-                  <Supertip>
-                    <Title resid="Button.Label"/>
-                    <Description resid="Button.Tooltip"/>
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="Icon.16"/>
-                    <bt:Image size="32" resid="Icon.32"/>
-                    <bt:Image size="80" resid="Icon.80"/>
-                  </Icon>
-                  <Action xsi:type="ShowTaskpane">
-                    <TaskpaneId>NikudKal.Pane</TaskpaneId>
-                    <SourceLocation resid="Taskpane.Url"/>
-                  </Action>
-                </Control>
-              </Group>
-            </OfficeTab>
+            <CustomTab id="NK.Tab">
+              <Group id="NK.G.Nikud"><Label resid="G.Nikud.Label"/><Icon><bt:Image size="16" resid="autoNikud.16"/><bt:Image size="32" resid="autoNikud.32"/><bt:Image size="80" resid="autoNikud.80"/></Icon><Control xsi:type="Button" id="NK.autoNikud"><Label resid="autoNikud.Label"/><Supertip><Title resid="autoNikud.Label"/><Description resid="autoNikud.Tip"/></Supertip><Icon><bt:Image size="16" resid="autoNikud.16"/><bt:Image size="32" resid="autoNikud.32"/><bt:Image size="80" resid="autoNikud.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>autoNikud</FunctionName></Action></Control><Control xsi:type="Button" id="NK.singleWord"><Label resid="singleWord.Label"/><Supertip><Title resid="singleWord.Label"/><Description resid="singleWord.Tip"/></Supertip><Icon><bt:Image size="16" resid="singleWord.16"/><bt:Image size="32" resid="singleWord.32"/><bt:Image size="80" resid="singleWord.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>singleWord</FunctionName></Action></Control><Control xsi:type="Button" id="NK.manualNikud"><Label resid="manualNikud.Label"/><Supertip><Title resid="manualNikud.Label"/><Description resid="manualNikud.Tip"/></Supertip><Icon><bt:Image size="16" resid="manualNikud.16"/><bt:Image size="32" resid="manualNikud.32"/><bt:Image size="80" resid="manualNikud.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>manualNikud</FunctionName></Action></Control><Control xsi:type="Button" id="NK.verseNikud"><Label resid="verseNikud.Label"/><Supertip><Title resid="verseNikud.Label"/><Description resid="verseNikud.Tip"/></Supertip><Icon><bt:Image size="16" resid="verseNikud.16"/><bt:Image size="32" resid="verseNikud.32"/><bt:Image size="80" resid="verseNikud.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>verseNikud</FunctionName></Action></Control></Group>
+              <Group id="NK.G.Tools"><Label resid="G.Tools.Label"/><Icon><bt:Image size="16" resid="openSettings.16"/><bt:Image size="32" resid="openSettings.32"/><bt:Image size="80" resid="openSettings.80"/></Icon><Control xsi:type="Button" id="NK.removeNikud"><Label resid="removeNikud.Label"/><Supertip><Title resid="removeNikud.Label"/><Description resid="removeNikud.Tip"/></Supertip><Icon><bt:Image size="16" resid="removeNikud.16"/><bt:Image size="32" resid="removeNikud.32"/><bt:Image size="80" resid="removeNikud.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>removeNikud</FunctionName></Action></Control><Control xsi:type="Button" id="NK.addToDictionary"><Label resid="addToDictionary.Label"/><Supertip><Title resid="addToDictionary.Label"/><Description resid="addToDictionary.Tip"/></Supertip><Icon><bt:Image size="16" resid="addToDictionary.16"/><bt:Image size="32" resid="addToDictionary.32"/><bt:Image size="80" resid="addToDictionary.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>addToDictionary</FunctionName></Action></Control><Control xsi:type="Button" id="NK.openDictionary"><Label resid="openDictionary.Label"/><Supertip><Title resid="openDictionary.Label"/><Description resid="openDictionary.Tip"/></Supertip><Icon><bt:Image size="16" resid="openDictionary.16"/><bt:Image size="32" resid="openDictionary.32"/><bt:Image size="80" resid="openDictionary.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>openDictionary</FunctionName></Action></Control><Control xsi:type="Button" id="NK.openSettings"><Label resid="openSettings.Label"/><Supertip><Title resid="openSettings.Label"/><Description resid="openSettings.Tip"/></Supertip><Icon><bt:Image size="16" resid="openSettings.16"/><bt:Image size="32" resid="openSettings.32"/><bt:Image size="80" resid="openSettings.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>openSettings</FunctionName></Action></Control></Group>
+              <Group id="NK.G.Vowels"><Label resid="G.Vowels.Label"/><Icon><bt:Image size="16" resid="mark_5B0.16"/><bt:Image size="32" resid="mark_5B0.32"/><bt:Image size="80" resid="mark_5B0.80"/></Icon><Control xsi:type="Button" id="NK.mark_5B0"><Label resid="mark_5B0.Label"/><Supertip><Title resid="mark_5B0.Label"/><Description resid="mark_5B0.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5B0.16"/><bt:Image size="32" resid="mark_5B0.32"/><bt:Image size="80" resid="mark_5B0.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5B0</FunctionName></Action></Control><Control xsi:type="Button" id="NK.mark_5B1"><Label resid="mark_5B1.Label"/><Supertip><Title resid="mark_5B1.Label"/><Description resid="mark_5B1.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5B1.16"/><bt:Image size="32" resid="mark_5B1.32"/><bt:Image size="80" resid="mark_5B1.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5B1</FunctionName></Action></Control><Control xsi:type="Button" id="NK.mark_5B2"><Label resid="mark_5B2.Label"/><Supertip><Title resid="mark_5B2.Label"/><Description resid="mark_5B2.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5B2.16"/><bt:Image size="32" resid="mark_5B2.32"/><bt:Image size="80" resid="mark_5B2.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5B2</FunctionName></Action></Control><Control xsi:type="Button" id="NK.mark_5B3"><Label resid="mark_5B3.Label"/><Supertip><Title resid="mark_5B3.Label"/><Description resid="mark_5B3.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5B3.16"/><bt:Image size="32" resid="mark_5B3.32"/><bt:Image size="80" resid="mark_5B3.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5B3</FunctionName></Action></Control><Control xsi:type="Button" id="NK.mark_5B4"><Label resid="mark_5B4.Label"/><Supertip><Title resid="mark_5B4.Label"/><Description resid="mark_5B4.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5B4.16"/><bt:Image size="32" resid="mark_5B4.32"/><bt:Image size="80" resid="mark_5B4.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5B4</FunctionName></Action></Control><Control xsi:type="Button" id="NK.mark_5B5"><Label resid="mark_5B5.Label"/><Supertip><Title resid="mark_5B5.Label"/><Description resid="mark_5B5.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5B5.16"/><bt:Image size="32" resid="mark_5B5.32"/><bt:Image size="80" resid="mark_5B5.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5B5</FunctionName></Action></Control><Control xsi:type="Button" id="NK.mark_5B6"><Label resid="mark_5B6.Label"/><Supertip><Title resid="mark_5B6.Label"/><Description resid="mark_5B6.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5B6.16"/><bt:Image size="32" resid="mark_5B6.32"/><bt:Image size="80" resid="mark_5B6.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5B6</FunctionName></Action></Control><Control xsi:type="Button" id="NK.mark_5B7"><Label resid="mark_5B7.Label"/><Supertip><Title resid="mark_5B7.Label"/><Description resid="mark_5B7.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5B7.16"/><bt:Image size="32" resid="mark_5B7.32"/><bt:Image size="80" resid="mark_5B7.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5B7</FunctionName></Action></Control><Control xsi:type="Button" id="NK.mark_5B8"><Label resid="mark_5B8.Label"/><Supertip><Title resid="mark_5B8.Label"/><Description resid="mark_5B8.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5B8.16"/><bt:Image size="32" resid="mark_5B8.32"/><bt:Image size="80" resid="mark_5B8.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5B8</FunctionName></Action></Control><Control xsi:type="Button" id="NK.mark_5C7"><Label resid="mark_5C7.Label"/><Supertip><Title resid="mark_5C7.Label"/><Description resid="mark_5C7.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5C7.16"/><bt:Image size="32" resid="mark_5C7.32"/><bt:Image size="80" resid="mark_5C7.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5C7</FunctionName></Action></Control><Control xsi:type="Button" id="NK.mark_5B9"><Label resid="mark_5B9.Label"/><Supertip><Title resid="mark_5B9.Label"/><Description resid="mark_5B9.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5B9.16"/><bt:Image size="32" resid="mark_5B9.32"/><bt:Image size="80" resid="mark_5B9.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5B9</FunctionName></Action></Control><Control xsi:type="Button" id="NK.mark_5BB"><Label resid="mark_5BB.Label"/><Supertip><Title resid="mark_5BB.Label"/><Description resid="mark_5BB.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5BB.16"/><bt:Image size="32" resid="mark_5BB.32"/><bt:Image size="80" resid="mark_5BB.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5BB</FunctionName></Action></Control><Control xsi:type="Button" id="NK.mark_5BC"><Label resid="mark_5BC.Label"/><Supertip><Title resid="mark_5BC.Label"/><Description resid="mark_5BC.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5BC.16"/><bt:Image size="32" resid="mark_5BC.32"/><bt:Image size="80" resid="mark_5BC.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5BC</FunctionName></Action></Control><Control xsi:type="Button" id="NK.mark_5C1"><Label resid="mark_5C1.Label"/><Supertip><Title resid="mark_5C1.Label"/><Description resid="mark_5C1.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5C1.16"/><bt:Image size="32" resid="mark_5C1.32"/><bt:Image size="80" resid="mark_5C1.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5C1</FunctionName></Action></Control><Control xsi:type="Button" id="NK.mark_5C2"><Label resid="mark_5C2.Label"/><Supertip><Title resid="mark_5C2.Label"/><Description resid="mark_5C2.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5C2.16"/><bt:Image size="32" resid="mark_5C2.32"/><bt:Image size="80" resid="mark_5C2.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5C2</FunctionName></Action></Control><Control xsi:type="Button" id="NK.mark_5BA"><Label resid="mark_5BA.Label"/><Supertip><Title resid="mark_5BA.Label"/><Description resid="mark_5BA.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5BA.16"/><bt:Image size="32" resid="mark_5BA.32"/><bt:Image size="80" resid="mark_5BA.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5BA</FunctionName></Action></Control><Control xsi:type="Button" id="NK.mark_5BD"><Label resid="mark_5BD.Label"/><Supertip><Title resid="mark_5BD.Label"/><Description resid="mark_5BD.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5BD.16"/><bt:Image size="32" resid="mark_5BD.32"/><bt:Image size="80" resid="mark_5BD.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5BD</FunctionName></Action></Control><Control xsi:type="Button" id="NK.mark_5BF"><Label resid="mark_5BF.Label"/><Supertip><Title resid="mark_5BF.Label"/><Description resid="mark_5BF.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5BF.16"/><bt:Image size="32" resid="mark_5BF.32"/><bt:Image size="80" resid="mark_5BF.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5BF</FunctionName></Action></Control><Control xsi:type="Button" id="NK.mark_200D_5B9"><Label resid="mark_200D_5B9.Label"/><Supertip><Title resid="mark_200D_5B9.Label"/><Description resid="mark_200D_5B9.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_200D_5B9.16"/><bt:Image size="32" resid="mark_200D_5B9.32"/><bt:Image size="80" resid="mark_200D_5B9.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_200D_5B9</FunctionName></Action></Control></Group>
+              <Group id="NK.G.Taamim"><Label resid="G.Taamim.Label"/><Icon><bt:Image size="16" resid="mark_591.16"/><bt:Image size="32" resid="mark_591.32"/><bt:Image size="80" resid="mark_591.80"/></Icon><Control xsi:type="Menu" id="NK.M.Taamim"><Label resid="M.Taamim.Label"/><Supertip><Title resid="M.Taamim.Label"/><Description resid="M.Taamim.Tip"/></Supertip><Icon><bt:Image size="16" resid="M.Taamim.16"/><bt:Image size="32" resid="M.Taamim.32"/><bt:Image size="80" resid="M.Taamim.80"/></Icon><Items><Item id="NK.mark_591"><Label resid="mark_591.Label"/><Supertip><Title resid="mark_591.Label"/><Description resid="mark_591.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_591.16"/><bt:Image size="32" resid="mark_591.32"/><bt:Image size="80" resid="mark_591.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_591</FunctionName></Action></Item><Item id="NK.mark_592"><Label resid="mark_592.Label"/><Supertip><Title resid="mark_592.Label"/><Description resid="mark_592.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_592.16"/><bt:Image size="32" resid="mark_592.32"/><bt:Image size="80" resid="mark_592.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_592</FunctionName></Action></Item><Item id="NK.mark_593"><Label resid="mark_593.Label"/><Supertip><Title resid="mark_593.Label"/><Description resid="mark_593.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_593.16"/><bt:Image size="32" resid="mark_593.32"/><bt:Image size="80" resid="mark_593.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_593</FunctionName></Action></Item><Item id="NK.mark_594"><Label resid="mark_594.Label"/><Supertip><Title resid="mark_594.Label"/><Description resid="mark_594.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_594.16"/><bt:Image size="32" resid="mark_594.32"/><bt:Image size="80" resid="mark_594.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_594</FunctionName></Action></Item><Item id="NK.mark_595"><Label resid="mark_595.Label"/><Supertip><Title resid="mark_595.Label"/><Description resid="mark_595.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_595.16"/><bt:Image size="32" resid="mark_595.32"/><bt:Image size="80" resid="mark_595.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_595</FunctionName></Action></Item><Item id="NK.mark_596"><Label resid="mark_596.Label"/><Supertip><Title resid="mark_596.Label"/><Description resid="mark_596.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_596.16"/><bt:Image size="32" resid="mark_596.32"/><bt:Image size="80" resid="mark_596.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_596</FunctionName></Action></Item><Item id="NK.mark_597"><Label resid="mark_597.Label"/><Supertip><Title resid="mark_597.Label"/><Description resid="mark_597.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_597.16"/><bt:Image size="32" resid="mark_597.32"/><bt:Image size="80" resid="mark_597.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_597</FunctionName></Action></Item><Item id="NK.mark_598"><Label resid="mark_598.Label"/><Supertip><Title resid="mark_598.Label"/><Description resid="mark_598.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_598.16"/><bt:Image size="32" resid="mark_598.32"/><bt:Image size="80" resid="mark_598.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_598</FunctionName></Action></Item><Item id="NK.mark_599"><Label resid="mark_599.Label"/><Supertip><Title resid="mark_599.Label"/><Description resid="mark_599.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_599.16"/><bt:Image size="32" resid="mark_599.32"/><bt:Image size="80" resid="mark_599.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_599</FunctionName></Action></Item><Item id="NK.mark_59A"><Label resid="mark_59A.Label"/><Supertip><Title resid="mark_59A.Label"/><Description resid="mark_59A.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_59A.16"/><bt:Image size="32" resid="mark_59A.32"/><bt:Image size="80" resid="mark_59A.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_59A</FunctionName></Action></Item><Item id="NK.mark_59B"><Label resid="mark_59B.Label"/><Supertip><Title resid="mark_59B.Label"/><Description resid="mark_59B.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_59B.16"/><bt:Image size="32" resid="mark_59B.32"/><bt:Image size="80" resid="mark_59B.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_59B</FunctionName></Action></Item><Item id="NK.mark_59C"><Label resid="mark_59C.Label"/><Supertip><Title resid="mark_59C.Label"/><Description resid="mark_59C.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_59C.16"/><bt:Image size="32" resid="mark_59C.32"/><bt:Image size="80" resid="mark_59C.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_59C</FunctionName></Action></Item><Item id="NK.mark_59D"><Label resid="mark_59D.Label"/><Supertip><Title resid="mark_59D.Label"/><Description resid="mark_59D.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_59D.16"/><bt:Image size="32" resid="mark_59D.32"/><bt:Image size="80" resid="mark_59D.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_59D</FunctionName></Action></Item><Item id="NK.mark_59E"><Label resid="mark_59E.Label"/><Supertip><Title resid="mark_59E.Label"/><Description resid="mark_59E.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_59E.16"/><bt:Image size="32" resid="mark_59E.32"/><bt:Image size="80" resid="mark_59E.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_59E</FunctionName></Action></Item><Item id="NK.mark_59F"><Label resid="mark_59F.Label"/><Supertip><Title resid="mark_59F.Label"/><Description resid="mark_59F.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_59F.16"/><bt:Image size="32" resid="mark_59F.32"/><bt:Image size="80" resid="mark_59F.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_59F</FunctionName></Action></Item><Item id="NK.mark_5A0"><Label resid="mark_5A0.Label"/><Supertip><Title resid="mark_5A0.Label"/><Description resid="mark_5A0.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5A0.16"/><bt:Image size="32" resid="mark_5A0.32"/><bt:Image size="80" resid="mark_5A0.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5A0</FunctionName></Action></Item><Item id="NK.mark_5A1"><Label resid="mark_5A1.Label"/><Supertip><Title resid="mark_5A1.Label"/><Description resid="mark_5A1.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5A1.16"/><bt:Image size="32" resid="mark_5A1.32"/><bt:Image size="80" resid="mark_5A1.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5A1</FunctionName></Action></Item><Item id="NK.mark_5A2"><Label resid="mark_5A2.Label"/><Supertip><Title resid="mark_5A2.Label"/><Description resid="mark_5A2.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5A2.16"/><bt:Image size="32" resid="mark_5A2.32"/><bt:Image size="80" resid="mark_5A2.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5A2</FunctionName></Action></Item><Item id="NK.mark_5A3"><Label resid="mark_5A3.Label"/><Supertip><Title resid="mark_5A3.Label"/><Description resid="mark_5A3.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5A3.16"/><bt:Image size="32" resid="mark_5A3.32"/><bt:Image size="80" resid="mark_5A3.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5A3</FunctionName></Action></Item><Item id="NK.mark_5A4"><Label resid="mark_5A4.Label"/><Supertip><Title resid="mark_5A4.Label"/><Description resid="mark_5A4.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5A4.16"/><bt:Image size="32" resid="mark_5A4.32"/><bt:Image size="80" resid="mark_5A4.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5A4</FunctionName></Action></Item><Item id="NK.mark_5A5"><Label resid="mark_5A5.Label"/><Supertip><Title resid="mark_5A5.Label"/><Description resid="mark_5A5.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5A5.16"/><bt:Image size="32" resid="mark_5A5.32"/><bt:Image size="80" resid="mark_5A5.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5A5</FunctionName></Action></Item><Item id="NK.mark_5A6"><Label resid="mark_5A6.Label"/><Supertip><Title resid="mark_5A6.Label"/><Description resid="mark_5A6.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5A6.16"/><bt:Image size="32" resid="mark_5A6.32"/><bt:Image size="80" resid="mark_5A6.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5A6</FunctionName></Action></Item><Item id="NK.mark_5A7"><Label resid="mark_5A7.Label"/><Supertip><Title resid="mark_5A7.Label"/><Description resid="mark_5A7.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5A7.16"/><bt:Image size="32" resid="mark_5A7.32"/><bt:Image size="80" resid="mark_5A7.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5A7</FunctionName></Action></Item><Item id="NK.mark_5A8"><Label resid="mark_5A8.Label"/><Supertip><Title resid="mark_5A8.Label"/><Description resid="mark_5A8.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5A8.16"/><bt:Image size="32" resid="mark_5A8.32"/><bt:Image size="80" resid="mark_5A8.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5A8</FunctionName></Action></Item><Item id="NK.mark_5A9"><Label resid="mark_5A9.Label"/><Supertip><Title resid="mark_5A9.Label"/><Description resid="mark_5A9.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5A9.16"/><bt:Image size="32" resid="mark_5A9.32"/><bt:Image size="80" resid="mark_5A9.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5A9</FunctionName></Action></Item><Item id="NK.mark_5AA"><Label resid="mark_5AA.Label"/><Supertip><Title resid="mark_5AA.Label"/><Description resid="mark_5AA.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5AA.16"/><bt:Image size="32" resid="mark_5AA.32"/><bt:Image size="80" resid="mark_5AA.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5AA</FunctionName></Action></Item><Item id="NK.mark_5AB"><Label resid="mark_5AB.Label"/><Supertip><Title resid="mark_5AB.Label"/><Description resid="mark_5AB.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5AB.16"/><bt:Image size="32" resid="mark_5AB.32"/><bt:Image size="80" resid="mark_5AB.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5AB</FunctionName></Action></Item><Item id="NK.mark_5AC"><Label resid="mark_5AC.Label"/><Supertip><Title resid="mark_5AC.Label"/><Description resid="mark_5AC.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5AC.16"/><bt:Image size="32" resid="mark_5AC.32"/><bt:Image size="80" resid="mark_5AC.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5AC</FunctionName></Action></Item><Item id="NK.mark_5AD"><Label resid="mark_5AD.Label"/><Supertip><Title resid="mark_5AD.Label"/><Description resid="mark_5AD.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5AD.16"/><bt:Image size="32" resid="mark_5AD.32"/><bt:Image size="80" resid="mark_5AD.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5AD</FunctionName></Action></Item><Item id="NK.mark_5AE"><Label resid="mark_5AE.Label"/><Supertip><Title resid="mark_5AE.Label"/><Description resid="mark_5AE.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5AE.16"/><bt:Image size="32" resid="mark_5AE.32"/><bt:Image size="80" resid="mark_5AE.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5AE</FunctionName></Action></Item><Item id="NK.mark_5BD"><Label resid="mark_5BD.Label"/><Supertip><Title resid="mark_5BD.Label"/><Description resid="mark_5BD.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5BD.16"/><bt:Image size="32" resid="mark_5BD.32"/><bt:Image size="80" resid="mark_5BD.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5BD</FunctionName></Action></Item><Item id="NK.mark_5BE"><Label resid="mark_5BE.Label"/><Supertip><Title resid="mark_5BE.Label"/><Description resid="mark_5BE.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5BE.16"/><bt:Image size="32" resid="mark_5BE.32"/><bt:Image size="80" resid="mark_5BE.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5BE</FunctionName></Action></Item><Item id="NK.mark_5C0"><Label resid="mark_5C0.Label"/><Supertip><Title resid="mark_5C0.Label"/><Description resid="mark_5C0.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5C0.16"/><bt:Image size="32" resid="mark_5C0.32"/><bt:Image size="80" resid="mark_5C0.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5C0</FunctionName></Action></Item><Item id="NK.mark_5C3"><Label resid="mark_5C3.Label"/><Supertip><Title resid="mark_5C3.Label"/><Description resid="mark_5C3.Tip"/></Supertip><Icon><bt:Image size="16" resid="mark_5C3.16"/><bt:Image size="32" resid="mark_5C3.32"/><bt:Image size="80" resid="mark_5C3.80"/></Icon><Action xsi:type="ExecuteFunction"><FunctionName>mark_5C3</FunctionName></Action></Item></Items></Control></Group>
+              <Label resid="Tab.Label"/>
+            </CustomTab>
           </ExtensionPoint>
         </DesktopFormFactor>
       </Host>
     </Hosts>
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16" DefaultValue="https://localhost:3000/assets/icon-16.png"/>
-        <bt:Image id="Icon.32" DefaultValue="https://localhost:3000/assets/icon-32.png"/>
-        <bt:Image id="Icon.80" DefaultValue="https://localhost:3000/assets/icon-80.png"/>
+        <bt:Image id="autoNikud.16" DefaultValue="https://localhost:3000/assets/ribbon/autoNikud-16.png"/>
+        <bt:Image id="autoNikud.32" DefaultValue="https://localhost:3000/assets/ribbon/autoNikud-32.png"/>
+        <bt:Image id="autoNikud.80" DefaultValue="https://localhost:3000/assets/ribbon/autoNikud-80.png"/>
+        <bt:Image id="singleWord.16" DefaultValue="https://localhost:3000/assets/ribbon/singleWord-16.png"/>
+        <bt:Image id="singleWord.32" DefaultValue="https://localhost:3000/assets/ribbon/singleWord-32.png"/>
+        <bt:Image id="singleWord.80" DefaultValue="https://localhost:3000/assets/ribbon/singleWord-80.png"/>
+        <bt:Image id="manualNikud.16" DefaultValue="https://localhost:3000/assets/ribbon/manualNikud-16.png"/>
+        <bt:Image id="manualNikud.32" DefaultValue="https://localhost:3000/assets/ribbon/manualNikud-32.png"/>
+        <bt:Image id="manualNikud.80" DefaultValue="https://localhost:3000/assets/ribbon/manualNikud-80.png"/>
+        <bt:Image id="verseNikud.16" DefaultValue="https://localhost:3000/assets/ribbon/verseNikud-16.png"/>
+        <bt:Image id="verseNikud.32" DefaultValue="https://localhost:3000/assets/ribbon/verseNikud-32.png"/>
+        <bt:Image id="verseNikud.80" DefaultValue="https://localhost:3000/assets/ribbon/verseNikud-80.png"/>
+        <bt:Image id="removeNikud.16" DefaultValue="https://localhost:3000/assets/ribbon/removeNikud-16.png"/>
+        <bt:Image id="removeNikud.32" DefaultValue="https://localhost:3000/assets/ribbon/removeNikud-32.png"/>
+        <bt:Image id="removeNikud.80" DefaultValue="https://localhost:3000/assets/ribbon/removeNikud-80.png"/>
+        <bt:Image id="addToDictionary.16" DefaultValue="https://localhost:3000/assets/ribbon/addToDictionary-16.png"/>
+        <bt:Image id="addToDictionary.32" DefaultValue="https://localhost:3000/assets/ribbon/addToDictionary-32.png"/>
+        <bt:Image id="addToDictionary.80" DefaultValue="https://localhost:3000/assets/ribbon/addToDictionary-80.png"/>
+        <bt:Image id="openDictionary.16" DefaultValue="https://localhost:3000/assets/ribbon/openDictionary-16.png"/>
+        <bt:Image id="openDictionary.32" DefaultValue="https://localhost:3000/assets/ribbon/openDictionary-32.png"/>
+        <bt:Image id="openDictionary.80" DefaultValue="https://localhost:3000/assets/ribbon/openDictionary-80.png"/>
+        <bt:Image id="openSettings.16" DefaultValue="https://localhost:3000/assets/ribbon/openSettings-16.png"/>
+        <bt:Image id="openSettings.32" DefaultValue="https://localhost:3000/assets/ribbon/openSettings-32.png"/>
+        <bt:Image id="openSettings.80" DefaultValue="https://localhost:3000/assets/ribbon/openSettings-80.png"/>
+        <bt:Image id="mark_5B0.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B0-16.png"/>
+        <bt:Image id="mark_5B0.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B0-32.png"/>
+        <bt:Image id="mark_5B0.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B0-80.png"/>
+        <bt:Image id="mark_5B1.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B1-16.png"/>
+        <bt:Image id="mark_5B1.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B1-32.png"/>
+        <bt:Image id="mark_5B1.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B1-80.png"/>
+        <bt:Image id="mark_5B2.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B2-16.png"/>
+        <bt:Image id="mark_5B2.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B2-32.png"/>
+        <bt:Image id="mark_5B2.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B2-80.png"/>
+        <bt:Image id="mark_5B3.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B3-16.png"/>
+        <bt:Image id="mark_5B3.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B3-32.png"/>
+        <bt:Image id="mark_5B3.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B3-80.png"/>
+        <bt:Image id="mark_5B4.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B4-16.png"/>
+        <bt:Image id="mark_5B4.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B4-32.png"/>
+        <bt:Image id="mark_5B4.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B4-80.png"/>
+        <bt:Image id="mark_5B5.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B5-16.png"/>
+        <bt:Image id="mark_5B5.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B5-32.png"/>
+        <bt:Image id="mark_5B5.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B5-80.png"/>
+        <bt:Image id="mark_5B6.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B6-16.png"/>
+        <bt:Image id="mark_5B6.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B6-32.png"/>
+        <bt:Image id="mark_5B6.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B6-80.png"/>
+        <bt:Image id="mark_5B7.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B7-16.png"/>
+        <bt:Image id="mark_5B7.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B7-32.png"/>
+        <bt:Image id="mark_5B7.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B7-80.png"/>
+        <bt:Image id="mark_5B8.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B8-16.png"/>
+        <bt:Image id="mark_5B8.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B8-32.png"/>
+        <bt:Image id="mark_5B8.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B8-80.png"/>
+        <bt:Image id="mark_5C7.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5C7-16.png"/>
+        <bt:Image id="mark_5C7.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5C7-32.png"/>
+        <bt:Image id="mark_5C7.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5C7-80.png"/>
+        <bt:Image id="mark_5B9.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B9-16.png"/>
+        <bt:Image id="mark_5B9.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B9-32.png"/>
+        <bt:Image id="mark_5B9.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5B9-80.png"/>
+        <bt:Image id="mark_5BB.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BB-16.png"/>
+        <bt:Image id="mark_5BB.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BB-32.png"/>
+        <bt:Image id="mark_5BB.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BB-80.png"/>
+        <bt:Image id="mark_5BC.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BC-16.png"/>
+        <bt:Image id="mark_5BC.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BC-32.png"/>
+        <bt:Image id="mark_5BC.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BC-80.png"/>
+        <bt:Image id="mark_5C1.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5C1-16.png"/>
+        <bt:Image id="mark_5C1.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5C1-32.png"/>
+        <bt:Image id="mark_5C1.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5C1-80.png"/>
+        <bt:Image id="mark_5C2.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5C2-16.png"/>
+        <bt:Image id="mark_5C2.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5C2-32.png"/>
+        <bt:Image id="mark_5C2.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5C2-80.png"/>
+        <bt:Image id="mark_5BA.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BA-16.png"/>
+        <bt:Image id="mark_5BA.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BA-32.png"/>
+        <bt:Image id="mark_5BA.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BA-80.png"/>
+        <bt:Image id="mark_5BD.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BD-16.png"/>
+        <bt:Image id="mark_5BD.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BD-32.png"/>
+        <bt:Image id="mark_5BD.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BD-80.png"/>
+        <bt:Image id="mark_5BF.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BF-16.png"/>
+        <bt:Image id="mark_5BF.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BF-32.png"/>
+        <bt:Image id="mark_5BF.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BF-80.png"/>
+        <bt:Image id="mark_200D_5B9.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_200D_5B9-16.png"/>
+        <bt:Image id="mark_200D_5B9.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_200D_5B9-32.png"/>
+        <bt:Image id="mark_200D_5B9.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_200D_5B9-80.png"/>
+        <bt:Image id="M.Taamim.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_591-16.png"/>
+        <bt:Image id="M.Taamim.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_591-32.png"/>
+        <bt:Image id="M.Taamim.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_591-80.png"/>
+        <bt:Image id="mark_591.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_591-16.png"/>
+        <bt:Image id="mark_591.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_591-32.png"/>
+        <bt:Image id="mark_591.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_591-80.png"/>
+        <bt:Image id="mark_592.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_592-16.png"/>
+        <bt:Image id="mark_592.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_592-32.png"/>
+        <bt:Image id="mark_592.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_592-80.png"/>
+        <bt:Image id="mark_593.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_593-16.png"/>
+        <bt:Image id="mark_593.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_593-32.png"/>
+        <bt:Image id="mark_593.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_593-80.png"/>
+        <bt:Image id="mark_594.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_594-16.png"/>
+        <bt:Image id="mark_594.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_594-32.png"/>
+        <bt:Image id="mark_594.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_594-80.png"/>
+        <bt:Image id="mark_595.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_595-16.png"/>
+        <bt:Image id="mark_595.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_595-32.png"/>
+        <bt:Image id="mark_595.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_595-80.png"/>
+        <bt:Image id="mark_596.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_596-16.png"/>
+        <bt:Image id="mark_596.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_596-32.png"/>
+        <bt:Image id="mark_596.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_596-80.png"/>
+        <bt:Image id="mark_597.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_597-16.png"/>
+        <bt:Image id="mark_597.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_597-32.png"/>
+        <bt:Image id="mark_597.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_597-80.png"/>
+        <bt:Image id="mark_598.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_598-16.png"/>
+        <bt:Image id="mark_598.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_598-32.png"/>
+        <bt:Image id="mark_598.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_598-80.png"/>
+        <bt:Image id="mark_599.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_599-16.png"/>
+        <bt:Image id="mark_599.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_599-32.png"/>
+        <bt:Image id="mark_599.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_599-80.png"/>
+        <bt:Image id="mark_59A.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_59A-16.png"/>
+        <bt:Image id="mark_59A.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_59A-32.png"/>
+        <bt:Image id="mark_59A.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_59A-80.png"/>
+        <bt:Image id="mark_59B.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_59B-16.png"/>
+        <bt:Image id="mark_59B.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_59B-32.png"/>
+        <bt:Image id="mark_59B.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_59B-80.png"/>
+        <bt:Image id="mark_59C.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_59C-16.png"/>
+        <bt:Image id="mark_59C.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_59C-32.png"/>
+        <bt:Image id="mark_59C.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_59C-80.png"/>
+        <bt:Image id="mark_59D.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_59D-16.png"/>
+        <bt:Image id="mark_59D.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_59D-32.png"/>
+        <bt:Image id="mark_59D.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_59D-80.png"/>
+        <bt:Image id="mark_59E.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_59E-16.png"/>
+        <bt:Image id="mark_59E.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_59E-32.png"/>
+        <bt:Image id="mark_59E.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_59E-80.png"/>
+        <bt:Image id="mark_59F.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_59F-16.png"/>
+        <bt:Image id="mark_59F.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_59F-32.png"/>
+        <bt:Image id="mark_59F.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_59F-80.png"/>
+        <bt:Image id="mark_5A0.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A0-16.png"/>
+        <bt:Image id="mark_5A0.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A0-32.png"/>
+        <bt:Image id="mark_5A0.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A0-80.png"/>
+        <bt:Image id="mark_5A1.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A1-16.png"/>
+        <bt:Image id="mark_5A1.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A1-32.png"/>
+        <bt:Image id="mark_5A1.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A1-80.png"/>
+        <bt:Image id="mark_5A2.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A2-16.png"/>
+        <bt:Image id="mark_5A2.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A2-32.png"/>
+        <bt:Image id="mark_5A2.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A2-80.png"/>
+        <bt:Image id="mark_5A3.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A3-16.png"/>
+        <bt:Image id="mark_5A3.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A3-32.png"/>
+        <bt:Image id="mark_5A3.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A3-80.png"/>
+        <bt:Image id="mark_5A4.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A4-16.png"/>
+        <bt:Image id="mark_5A4.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A4-32.png"/>
+        <bt:Image id="mark_5A4.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A4-80.png"/>
+        <bt:Image id="mark_5A5.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A5-16.png"/>
+        <bt:Image id="mark_5A5.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A5-32.png"/>
+        <bt:Image id="mark_5A5.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A5-80.png"/>
+        <bt:Image id="mark_5A6.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A6-16.png"/>
+        <bt:Image id="mark_5A6.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A6-32.png"/>
+        <bt:Image id="mark_5A6.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A6-80.png"/>
+        <bt:Image id="mark_5A7.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A7-16.png"/>
+        <bt:Image id="mark_5A7.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A7-32.png"/>
+        <bt:Image id="mark_5A7.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A7-80.png"/>
+        <bt:Image id="mark_5A8.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A8-16.png"/>
+        <bt:Image id="mark_5A8.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A8-32.png"/>
+        <bt:Image id="mark_5A8.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A8-80.png"/>
+        <bt:Image id="mark_5A9.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A9-16.png"/>
+        <bt:Image id="mark_5A9.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A9-32.png"/>
+        <bt:Image id="mark_5A9.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5A9-80.png"/>
+        <bt:Image id="mark_5AA.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5AA-16.png"/>
+        <bt:Image id="mark_5AA.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5AA-32.png"/>
+        <bt:Image id="mark_5AA.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5AA-80.png"/>
+        <bt:Image id="mark_5AB.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5AB-16.png"/>
+        <bt:Image id="mark_5AB.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5AB-32.png"/>
+        <bt:Image id="mark_5AB.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5AB-80.png"/>
+        <bt:Image id="mark_5AC.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5AC-16.png"/>
+        <bt:Image id="mark_5AC.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5AC-32.png"/>
+        <bt:Image id="mark_5AC.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5AC-80.png"/>
+        <bt:Image id="mark_5AD.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5AD-16.png"/>
+        <bt:Image id="mark_5AD.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5AD-32.png"/>
+        <bt:Image id="mark_5AD.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5AD-80.png"/>
+        <bt:Image id="mark_5AE.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5AE-16.png"/>
+        <bt:Image id="mark_5AE.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5AE-32.png"/>
+        <bt:Image id="mark_5AE.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5AE-80.png"/>
+        <bt:Image id="mark_5BD.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BD-16.png"/>
+        <bt:Image id="mark_5BD.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BD-32.png"/>
+        <bt:Image id="mark_5BD.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BD-80.png"/>
+        <bt:Image id="mark_5BE.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BE-16.png"/>
+        <bt:Image id="mark_5BE.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BE-32.png"/>
+        <bt:Image id="mark_5BE.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5BE-80.png"/>
+        <bt:Image id="mark_5C0.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5C0-16.png"/>
+        <bt:Image id="mark_5C0.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5C0-32.png"/>
+        <bt:Image id="mark_5C0.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5C0-80.png"/>
+        <bt:Image id="mark_5C3.16" DefaultValue="https://localhost:3000/assets/ribbon/mark_5C3-16.png"/>
+        <bt:Image id="mark_5C3.32" DefaultValue="https://localhost:3000/assets/ribbon/mark_5C3-32.png"/>
+        <bt:Image id="mark_5C3.80" DefaultValue="https://localhost:3000/assets/ribbon/mark_5C3-80.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="Commands.Url" DefaultValue="https://localhost:3000/src/commands.html"/>
         <bt:Url id="Taskpane.Url" DefaultValue="https://localhost:3000/src/taskpane.html"/>
         <bt:Url id="Readme.Url" DefaultValue="https://localhost:3000/README.md"/>
       </bt:Urls>
       <bt:ShortStrings>
+        <bt:String id="autoNikud.Label" DefaultValue="ניקוד אוטומטי"/>
+        <bt:String id="singleWord.Label" DefaultValue="מילה בודדת"/>
+        <bt:String id="manualNikud.Label" DefaultValue="ניקוד ידני"/>
+        <bt:String id="verseNikud.Label" DefaultValue="ניקוד פסוקים"/>
+        <bt:String id="G.Nikud.Label" DefaultValue="ניקוד"/>
+        <bt:String id="removeNikud.Label" DefaultValue="מחק ניקוד"/>
+        <bt:String id="addToDictionary.Label" DefaultValue="הוסף מילים למילון"/>
+        <bt:String id="openDictionary.Label" DefaultValue="מילון"/>
+        <bt:String id="openSettings.Label" DefaultValue="הגדרות"/>
+        <bt:String id="G.Tools.Label" DefaultValue="כלים"/>
+        <bt:String id="mark_5B0.Label" DefaultValue="שווא"/>
+        <bt:String id="mark_5B1.Label" DefaultValue="חטף סגול"/>
+        <bt:String id="mark_5B2.Label" DefaultValue="חטף פתח"/>
+        <bt:String id="mark_5B3.Label" DefaultValue="חטף קמץ"/>
+        <bt:String id="mark_5B4.Label" DefaultValue="חיריק"/>
+        <bt:String id="mark_5B5.Label" DefaultValue="צירה"/>
+        <bt:String id="mark_5B6.Label" DefaultValue="סגול"/>
+        <bt:String id="mark_5B7.Label" DefaultValue="פתח"/>
+        <bt:String id="mark_5B8.Label" DefaultValue="קמץ"/>
+        <bt:String id="mark_5C7.Label" DefaultValue="קמץ קטן"/>
+        <bt:String id="mark_5B9.Label" DefaultValue="חולם"/>
+        <bt:String id="mark_5BB.Label" DefaultValue="קובוץ"/>
+        <bt:String id="mark_5BC.Label" DefaultValue="דגש / שורוק"/>
+        <bt:String id="mark_5C1.Label" DefaultValue="נקודת שין ימנית"/>
+        <bt:String id="mark_5C2.Label" DefaultValue="נקודת שין שמאלית"/>
+        <bt:String id="mark_5BA.Label" DefaultValue="חולם חסר לוו"/>
+        <bt:String id="mark_5BD.Label" DefaultValue="מתג"/>
+        <bt:String id="mark_5BF.Label" DefaultValue="רפה"/>
+        <bt:String id="mark_200D_5B9.Label" DefaultValue="חולם אחרי ו'"/>
+        <bt:String id="G.Vowels.Label" DefaultValue="כפתורי ניקוד"/>
+        <bt:String id="M.Taamim.Label" DefaultValue="טעמים"/>
+        <bt:String id="mark_591.Label" DefaultValue="אתנחתא"/>
+        <bt:String id="mark_592.Label" DefaultValue="סגולתא"/>
+        <bt:String id="mark_593.Label" DefaultValue="שלשלת"/>
+        <bt:String id="mark_594.Label" DefaultValue="זקף קטן"/>
+        <bt:String id="mark_595.Label" DefaultValue="זקף גדול"/>
+        <bt:String id="mark_596.Label" DefaultValue="טפחא"/>
+        <bt:String id="mark_597.Label" DefaultValue="רביע"/>
+        <bt:String id="mark_598.Label" DefaultValue="זרקא"/>
+        <bt:String id="mark_599.Label" DefaultValue="פשטא"/>
+        <bt:String id="mark_59A.Label" DefaultValue="יתיב"/>
+        <bt:String id="mark_59B.Label" DefaultValue="תביר"/>
+        <bt:String id="mark_59C.Label" DefaultValue="גרש"/>
+        <bt:String id="mark_59D.Label" DefaultValue="גרש מוקדם"/>
+        <bt:String id="mark_59E.Label" DefaultValue="גרשיים"/>
+        <bt:String id="mark_59F.Label" DefaultValue="קרני פרה"/>
+        <bt:String id="mark_5A0.Label" DefaultValue="תלישא גדולה"/>
+        <bt:String id="mark_5A1.Label" DefaultValue="פזר"/>
+        <bt:String id="mark_5A2.Label" DefaultValue="אתנח הפוך"/>
+        <bt:String id="mark_5A3.Label" DefaultValue="מונח"/>
+        <bt:String id="mark_5A4.Label" DefaultValue="מהפך"/>
+        <bt:String id="mark_5A5.Label" DefaultValue="מרכא"/>
+        <bt:String id="mark_5A6.Label" DefaultValue="מרכא כפולה"/>
+        <bt:String id="mark_5A7.Label" DefaultValue="דרגא"/>
+        <bt:String id="mark_5A8.Label" DefaultValue="קדמא"/>
+        <bt:String id="mark_5A9.Label" DefaultValue="תלישא קטנה"/>
+        <bt:String id="mark_5AA.Label" DefaultValue="ירח בן יומו"/>
+        <bt:String id="mark_5AB.Label" DefaultValue="עולה"/>
+        <bt:String id="mark_5AC.Label" DefaultValue="עילוי"/>
+        <bt:String id="mark_5AD.Label" DefaultValue="דחי"/>
+        <bt:String id="mark_5AE.Label" DefaultValue="צינורית"/>
+        <bt:String id="mark_5BD.Label" DefaultValue="מתג / געיה"/>
+        <bt:String id="mark_5BE.Label" DefaultValue="מקף"/>
+        <bt:String id="mark_5C0.Label" DefaultValue="פסק"/>
+        <bt:String id="mark_5C3.Label" DefaultValue="סוף פסוק"/>
+        <bt:String id="G.Taamim.Label" DefaultValue="טעמי המקרא"/>
+        <bt:String id="Tab.Label" DefaultValue="ניקוד קל"/>
         <bt:String id="GetStarted.Title" DefaultValue="ניקוד קל מוכן לעבודה"/>
-        <bt:String id="Group.Label" DefaultValue="ניקוד קל"/>
-        <bt:String id="Button.Label" DefaultValue="ניקוד"/>
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="GetStarted.Description" DefaultValue="לחצו על &quot;ניקוד&quot; בלשונית 'בית' כדי לפתוח את חלונית הניקוד."/>
-        <bt:String id="Button.Tooltip" DefaultValue="פותח את חלונית הניקוד: ניקוד אוטומטי, ניקוד ידני, מילון והגדרות."/>
+        <bt:String id="autoNikud.Tip" DefaultValue="ניקוד מהסמן והלאה, או של הקטע שנבחר."/>
+        <bt:String id="singleWord.Tip" DefaultValue="ניקוד או תיקון של המילה שבמקום הסמן."/>
+        <bt:String id="manualNikud.Tip" DefaultValue="ניקוד ידני מילה אחרי מילה."/>
+        <bt:String id="verseNikud.Tip" DefaultValue="ניקוד הפסוק שנבחר לפי התנ&quot;ך, עם מקור ומירכאות."/>
+        <bt:String id="removeNikud.Tip" DefaultValue="הסרת הניקוד מהטקסט שנבחר."/>
+        <bt:String id="addToDictionary.Tip" DefaultValue="כל המילים המנוקדות שבבחירה נכנסות למילון."/>
+        <bt:String id="openDictionary.Tip" DefaultValue="צפייה ועריכה של המילון."/>
+        <bt:String id="openSettings.Tip" DefaultValue="הגדרות הניקוד."/>
+        <bt:String id="mark_5B0.Tip" DefaultValue="הוספת שווא אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5B1.Tip" DefaultValue="הוספת חטף סגול אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5B2.Tip" DefaultValue="הוספת חטף פתח אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5B3.Tip" DefaultValue="הוספת חטף קמץ אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5B4.Tip" DefaultValue="הוספת חיריק אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5B5.Tip" DefaultValue="הוספת צירה אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5B6.Tip" DefaultValue="הוספת סגול אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5B7.Tip" DefaultValue="הוספת פתח אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5B8.Tip" DefaultValue="הוספת קמץ אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5C7.Tip" DefaultValue="הוספת קמץ קטן אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5B9.Tip" DefaultValue="הוספת חולם אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5BB.Tip" DefaultValue="הוספת קובוץ אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5BC.Tip" DefaultValue="הוספת דגש / שורוק אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5C1.Tip" DefaultValue="הוספת נקודת שין ימנית אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5C2.Tip" DefaultValue="הוספת נקודת שין שמאלית אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5BA.Tip" DefaultValue="הוספת חולם חסר לוו אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5BD.Tip" DefaultValue="הוספת מתג אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5BF.Tip" DefaultValue="הוספת רפה אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_200D_5B9.Tip" DefaultValue="הוספת חולם אחרי ו' אחרי האות שלפני הסמן."/>
+        <bt:String id="M.Taamim.Tip" DefaultValue="הוספת טעם אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_591.Tip" DefaultValue="הוספת אתנחתא אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_592.Tip" DefaultValue="הוספת סגולתא אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_593.Tip" DefaultValue="הוספת שלשלת אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_594.Tip" DefaultValue="הוספת זקף קטן אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_595.Tip" DefaultValue="הוספת זקף גדול אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_596.Tip" DefaultValue="הוספת טפחא אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_597.Tip" DefaultValue="הוספת רביע אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_598.Tip" DefaultValue="הוספת זרקא אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_599.Tip" DefaultValue="הוספת פשטא אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_59A.Tip" DefaultValue="הוספת יתיב אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_59B.Tip" DefaultValue="הוספת תביר אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_59C.Tip" DefaultValue="הוספת גרש אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_59D.Tip" DefaultValue="הוספת גרש מוקדם אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_59E.Tip" DefaultValue="הוספת גרשיים אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_59F.Tip" DefaultValue="הוספת קרני פרה אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5A0.Tip" DefaultValue="הוספת תלישא גדולה אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5A1.Tip" DefaultValue="הוספת פזר אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5A2.Tip" DefaultValue="הוספת אתנח הפוך אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5A3.Tip" DefaultValue="הוספת מונח אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5A4.Tip" DefaultValue="הוספת מהפך אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5A5.Tip" DefaultValue="הוספת מרכא אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5A6.Tip" DefaultValue="הוספת מרכא כפולה אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5A7.Tip" DefaultValue="הוספת דרגא אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5A8.Tip" DefaultValue="הוספת קדמא אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5A9.Tip" DefaultValue="הוספת תלישא קטנה אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5AA.Tip" DefaultValue="הוספת ירח בן יומו אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5AB.Tip" DefaultValue="הוספת עולה אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5AC.Tip" DefaultValue="הוספת עילוי אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5AD.Tip" DefaultValue="הוספת דחי אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5AE.Tip" DefaultValue="הוספת צינורית אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5BD.Tip" DefaultValue="הוספת מתג / געיה אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5BE.Tip" DefaultValue="הוספת מקף אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5C0.Tip" DefaultValue="הוספת פסק אחרי האות שלפני הסמן."/>
+        <bt:String id="mark_5C3.Tip" DefaultValue="הוספת סוף פסוק אחרי האות שלפני הסמן."/>
+        <bt:String id="GetStarted.Description" DefaultValue="הכפתורים נמצאים בלשונית &quot;ניקוד קל&quot;."/>
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
+  <ExtendedOverrides Url="https://localhost:3000/shortcuts.json"/>
 </OfficeApp>

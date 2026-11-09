@@ -5,7 +5,8 @@ import { Dictionary } from './core/dictionary.js';
 import { suggest, decide, insideSkippedBrackets } from './core/analyzer.js';
 import { hasNikud, makeKey, normalizeMarks, stripMarks } from './core/hebrew.js';
 import { PRESETS, sanitizeSettings } from './core/settings.js';
-import { NIKUD, TAAMIM, HOLAM_AFTER_VAV, markForKey, keyLabel } from './core/marks.js';
+import { NIKUD, TAAMIM, HOLAM_AFTER_VAV, markForKey, keyLabel, markId } from './core/marks.js';
+import { VerseIndex, stripCantillation } from './core/verses.js';
 import {
   loadDictionaryEntries, saveDictionaryChanges, clearDictionaryStore, loadSettings, saveSettings,
 } from './storage.js';
@@ -20,6 +21,11 @@ const state = {
   /** @type {WordSession|null} */
   session: null,
   single: false,
+  manualMode: false,
+  /** חלון הפסוקים הפתוח: {standalone, start, count, results, selected} */
+  verse: null,
+  /** @type {VerseIndex|null} */
+  verseIndex: null,
   index: -1,
   options: [],
   selected: 0,
@@ -93,10 +99,14 @@ function markButton(container, { mark, name, standalone }, onClick, label = '') 
 
 const currentItem = () => state.session?.items[state.index] ?? null;
 
-async function startSession(single) {
+async function startSession(single, { manual = false } = {}) {
   if (!requireWord()) return;
+  state.session?.close();
+  closeVerse();
+  showTab('nikud');
   state.session = new WordSession();
   state.single = single;
+  state.manualMode = manual;
   state.index = -1;
   state.always = new Map();
   state.applied = 0;
@@ -117,6 +127,9 @@ async function startSession(single) {
 function finish(msg = 'הניקוד הסתיים.') {
   state.session?.close();
   state.session = null;
+  state.manualMode = false;
+  state.verse = null;
+  $('verse').hidden = true;
   $('session').hidden = true;
   $('idle').hidden = false;
   setStatus(msg);
@@ -145,8 +158,10 @@ async function advance(dir, { force = false } = {}) {
     }
     state.index = i;
     const item = s.items[i];
+    if (!item.range) continue; // מילה שנבלעה בפסוק
     const suggestions = suggest(item.key, state.dict, state.settings);
 
+    if (state.manualMode) return show(item, suggestions, 'manual');
     if (dir < 0 || force) return show(item, suggestions, suggestions.length ? 'ask' : 'manual');
 
     const d = decide({
@@ -185,7 +200,7 @@ async function show(item, suggestions, mode) {
   $('counter').textContent = `${state.index + 1}`;
   renderOptions();
   setManual(suggestions[0]?.text ?? item.text);
-  setStatus(mode === 'manual' ? 'המילה אינה במילון. נקדו ידנית או המשיכו.' : '');
+  setStatus(mode === 'manual' && !state.manualMode && !suggestions.length ? 'המילה אינה במילון. נקדו ידנית או המשיכו.' : '');
   await state.session.select(item);
   if (mode === 'manual') focusManual();
   else $('options').focus();
@@ -334,7 +349,7 @@ function onOptionsKey(e) {
     guarded(fn);
   };
   if (e.ctrlKey && e.key === 'ArrowDown') { e.preventDefault(); return focusManual(); }
-  if (e.ctrlKey && e.key === 'ArrowUp') { e.preventDefault(); return setStatus('ניקוד פסוקים יתווסף בשלב הבא.'); }
+  if (e.ctrlKey && e.key === 'ArrowUp') { e.preventDefault(); return guarded(() => openVerse(false)); }
   switch (e.key) {
     case 'ArrowDown': e.preventDefault(); return select(state.selected + 1);
     case 'ArrowUp': e.preventDefault(); return select(state.selected - 1);
@@ -372,7 +387,7 @@ function onManualKey(e) {
   }
   if (e.ctrlKey && e.key === 'ArrowRight') return run(() => advance(-1));
   if (e.ctrlKey && e.key === 'ArrowLeft') return run(() => advance(+1, { force: e.shiftKey }));
-  if (e.ctrlKey && e.key === 'ArrowUp') { e.preventDefault(); $('options').focus(); }
+  if (e.ctrlKey && e.key === 'ArrowUp') { e.preventDefault(); guarded(() => openVerse(false)); }
 }
 
 function onSessionKey(e) {
@@ -383,6 +398,265 @@ function onSessionKey(e) {
     e.preventDefault();
     showTab('settings');
   }
+}
+
+
+// ---------- ניקוד פסוקים ----------
+
+async function loadVerseIndex() {
+  if (state.verseIndex) return state.verseIndex;
+  setStatus('טוען את התנ"ך…');
+  await new Promise((r) => setTimeout(r, 0));
+  const res = await fetch('../data/tanach.json');
+  if (!res.ok) throw new Error('קובץ התנ"ך לא נמצא');
+  state.verseIndex = new VerseIndex(await res.json());
+  setStatus('');
+  return state.verseIndex;
+}
+
+const verseItems = () => (state.verse ? state.session.items.slice(state.verse.start, state.verse.start + state.verse.count) : []);
+
+/** מוודא שיש לפחות n מילים לחיפוש, אם הן קיימות במסמך. */
+async function ensureVerseWords(n) {
+  const v = state.verse;
+  const s = state.session;
+  while (s.items.length < v.start + n && (await s.loadMore()));
+  v.count = Math.max(1, Math.min(n, s.items.length - v.start));
+}
+
+/**
+ * פותח את חלון הפסוקים.
+ * standalone: על המילים שנבחרו במסמך. אחרת: מהמילה הנוכחית בתהליך הניקוד.
+ */
+async function openVerse(standalone) {
+  if (!requireWord()) return;
+  showTab('nikud');
+  if (standalone && state.session) standalone = false;
+  if (standalone) {
+    const s = new WordSession();
+    if (!(await s.open({ requireSelection: true }))) {
+      return setStatus('בחרו במסמך את המילים של הפסוק, ואז לחצו על "ניקוד פסוקים".', true);
+    }
+    while (await s.loadMore());
+    if (!s.items.length) return setStatus('לא נמצאו מילים עבריות בבחירה.', true);
+    state.session = s;
+    state.single = false;
+    state.index = 0;
+    state.verse = { standalone: true, start: 0, count: s.items.length, results: [], selected: 0 };
+  } else {
+    if (!state.session || state.index < 0) return;
+    state.verse = { standalone: false, start: state.index, count: 1, results: [], selected: 0 };
+    await ensureVerseWords(2);
+  }
+  $('idle').hidden = true;
+  $('session').hidden = true;
+  $('verse').hidden = false;
+  $('verse-source').checked = state.settings.verseSource;
+  $('verse-quotes').checked = state.settings.verseQuotes;
+  $('verse-taamim').checked = state.settings.verseTaamim;
+  $('verse-no-nikud').checked = state.settings.verseNoNikud;
+  renderVerseWords();
+  renderVerseResults();
+  await loadVerseIndex();
+  if (standalone) await verseSearch();
+  else $('verse').focus();
+}
+
+function renderVerseWords() {
+  const box = $('verse-words');
+  box.replaceChildren();
+  for (const it of verseItems()) {
+    const span = document.createElement('span');
+    span.textContent = it.text;
+    box.appendChild(span);
+  }
+}
+
+function renderVerseResults() {
+  const v = state.verse;
+  const ul = $('verse-results');
+  ul.replaceChildren();
+  if (!v || !v.searched) return;
+  if (!v.results.length) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = 'לא נמצא פסוק. נסו להוסיף או להוריד מילים.';
+    ul.appendChild(li);
+    return;
+  }
+  const idx = state.verseIndex;
+  v.results.forEach((m, i) => {
+    const li = document.createElement('li');
+    li.setAttribute('role', 'option');
+    li.setAttribute('aria-selected', String(i === v.selected));
+    const ref = document.createElement('span');
+    ref.className = 'ref';
+    ref.textContent = idx.refText(m.id);
+    li.appendChild(ref);
+    idx.words[m.id].forEach((w, j, all) => {
+      const t = stripCantillation(w.text) + (j < all.length - 1 ? w.sep || ' ' : '');
+      if (j >= m.start && j < m.start + m.len) {
+        const mk = document.createElement('mark');
+        mk.textContent = t;
+        li.appendChild(mk);
+      } else li.appendChild(document.createTextNode(t));
+    });
+    li.addEventListener('click', () => selectVerse(i));
+    li.addEventListener('dblclick', () => guarded(() => verseApply(false)));
+    ul.appendChild(li);
+  });
+}
+
+function selectVerse(i) {
+  const v = state.verse;
+  if (!v?.results.length) return;
+  const n = v.results.length;
+  v.selected = ((i % n) + n) % n;
+  const lis = $('verse-results').children;
+  for (let k = 0; k < lis.length; k++) lis[k].setAttribute('aria-selected', String(k === v.selected));
+  lis[v.selected]?.scrollIntoView({ block: 'nearest' });
+}
+
+async function verseSearch() {
+  const v = state.verse;
+  if (!v) return;
+  const idx = await loadVerseIndex();
+  v.results = idx.search(verseItems().map((i) => i.text));
+  v.selected = 0;
+  v.searched = true;
+  renderVerseResults();
+  setStatus(v.results.length ? `נמצאו ${v.results.length} פסוקים.` : '');
+  $('verse-results').focus();
+}
+
+async function verseResize(delta) {
+  const v = state.verse;
+  if (!v || v.standalone) return;
+  await ensureVerseWords(Math.max(1, v.count + delta));
+  v.searched = false;
+  renderVerseWords();
+  renderVerseResults();
+}
+
+function readVerseOptions() {
+  applySettings({
+    ...state.settings,
+    verseSource: $('verse-source').checked,
+    verseQuotes: $('verse-quotes').checked,
+    verseTaamim: $('verse-taamim').checked,
+    verseNoNikud: $('verse-no-nikud').checked,
+  });
+}
+
+async function verseApply(full) {
+  const v = state.verse;
+  const m = v?.results[v.selected];
+  if (!m) return setStatus('בחרו פסוק מהרשימה.');
+  const idx = state.verseIndex;
+  const items = verseItems();
+  const o = state.settings;
+  const text = o.verseNoNikud && !full
+    ? null
+    : idx.render(m, { full, taamim: o.verseTaamim, nikud: !o.verseNoNikud, userWords: items.map((i) => i.text) });
+  await state.session.applySpan(items, text, {
+    quotes: o.verseQuotes,
+    source: o.verseSource ? idx.refText(m.id) : '',
+  });
+  if (v.standalone) return finish(`נוסף פסוק: ${idx.refText(m.id)}.`);
+  closeVerse();
+  state.index = v.start + v.count - 1;
+  await advance(+1);
+}
+
+function closeVerse() {
+  state.verse = null;
+  $('verse').hidden = true;
+  if (state.session) $('session').hidden = false;
+}
+
+async function verseCancel() {
+  const v = state.verse;
+  if (!v) return;
+  if (v.standalone) return finish('');
+  closeVerse();
+  const item = currentItem();
+  if (item) await show(item, suggest(item.key, state.dict, state.settings), state.manualMode ? 'manual' : 'ask');
+}
+
+function onVerseKey(e) {
+  const inResults = e.target === $('verse-results');
+  const onControl = e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON';
+  const run = (fn) => {
+    e.preventDefault();
+    guarded(fn);
+  };
+  if (e.key === 'Escape') return run(verseCancel);
+  if (inResults) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); return selectVerse(state.verse.selected + 1); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); return selectVerse(state.verse.selected - 1); }
+    if (e.key === 'Enter' || e.key === ' ') return run(() => verseApply(false));
+  }
+  if (onControl) return;
+  if (e.key === ' ') return run(() => verseResize(+1));
+  if (e.key === 'Backspace') return run(() => verseResize(-1));
+  if (e.key === 'Enter') return run(verseSearch);
+}
+
+// ---------- פקודות מרצועת הכלים ----------
+
+async function stripDocSelection() {
+  if (!requireWord()) return;
+  const n = await stripSelection();
+  setStatus(n ? `הוסר ניקוד מ-${n} מילים.` : 'לא נמצא ניקוד בבחירה.');
+}
+
+async function addSelectionToDict() {
+  if (!requireWord()) return;
+  const added = state.dict.addFromText(await getSelectionText());
+  await persist();
+  setStatus(added ? `נוספו ${added.toLocaleString('he')} מילים למילון.` : 'לא נמצאו בבחירה מילים מנוקדות חדשות.');
+}
+
+/** כפתורי הלשונית "ניקוד קל" וקיצורי המקשים. עובד כשה-runtime משותף (SharedRuntime 1.1). */
+function registerRibbonActions() {
+  if (typeof Office === 'undefined' || !Office.actions) return;
+  const withPane = (fn) => async (event) => {
+    try {
+      await Office.addin?.showAsTaskpane?.();
+    } catch {
+      /* החלונית כבר פתוחה, או שהפעולה לא נתמכת */
+    }
+    try {
+      await fn();
+    } finally {
+      event?.completed?.();
+    }
+  };
+  const handlers = {
+    autoNikud: () => guarded(() => startSession(false)),
+    singleWord: () => guarded(() => startSession(true)),
+    manualNikud: () => guarded(() => startSession(false, { manual: true })),
+    verseNikud: () => guarded(() => openVerse(true)),
+    removeNikud: () => guarded(stripDocSelection),
+    addToDictionary: () => guarded(addSelectionToDict),
+    openDictionary: () => showTab('dictionary'),
+    openSettings: () => showTab('settings'),
+  };
+  for (const [id, fn] of Object.entries(handlers)) Office.actions.associate(id, withPane(fn));
+  for (const m of [...NIKUD, HOLAM_AFTER_VAV, ...TAAMIM]) {
+    Office.actions.associate(markId(m.mark), async (event) => {
+      try {
+        await insertAtCursor(m.mark);
+      } finally {
+        event?.completed?.();
+      }
+    });
+  }
+}
+
+function updateClickModeButton() {
+  $('btn-click-mode').textContent = state.settings.singleClick ? '{1}' : '{2}';
+  $('btn-click-mode').title = state.settings.singleClick ? 'בחירה בלחיצה אחת. לחצו לבחירה בלחיצה כפולה.' : 'בחירה בלחיצה כפולה. לחצו לבחירה בלחיצה אחת.';
 }
 
 // ---------- מילון ----------
@@ -535,6 +809,7 @@ function applySettings(s) {
   state.settings = sanitizeSettings(s);
   saveSettings(state.settings);
   fillSettingsForm();
+  updateClickModeButton();
 }
 
 // ---------- אתחול ----------
@@ -544,12 +819,27 @@ function wire() {
 
   $('btn-start').addEventListener('click', () => guarded(() => startSession(false)));
   $('btn-single').addEventListener('click', () => guarded(() => startSession(true)));
-  $('btn-add-selection').addEventListener('click', () => guarded(async () => {
-    if (!requireWord()) return;
-    const added = state.dict.addFromText(await getSelectionText());
-    await persist();
-    setStatus(added ? `נוספו ${added.toLocaleString('he')} מילים למילון.` : 'לא נמצאו בבחירה מילים מנוקדות חדשות.');
-  }));
+  $('btn-manual').addEventListener('click', () => guarded(() => startSession(false, { manual: true })));
+  $('btn-verse').addEventListener('click', () => guarded(() => openVerse(true)));
+  $('btn-strip-doc').addEventListener('click', () => guarded(stripDocSelection));
+  $('btn-add-selection').addEventListener('click', () => guarded(addSelectionToDict));
+  $('btn-open-dict').addEventListener('click', () => showTab('dictionary'));
+  $('btn-open-settings').addEventListener('click', () => showTab('settings'));
+  $('btn-click-mode').addEventListener('click', () => applySettings({ ...state.settings, singleClick: !state.settings.singleClick }));
+  $('btn-session-verse').addEventListener('click', () => guarded(() => openVerse(false)));
+  $('btn-session-settings').addEventListener('click', () => showTab('settings'));
+
+  $('verse').tabIndex = -1;
+  $('verse').addEventListener('keydown', onVerseKey);
+  $('verse-more').addEventListener('click', () => guarded(() => verseResize(+1)));
+  $('verse-less').addEventListener('click', () => guarded(() => verseResize(-1)));
+  $('verse-search').addEventListener('click', () => guarded(verseSearch));
+  $('verse-ok').addEventListener('click', () => guarded(() => verseApply(false)));
+  $('verse-full').addEventListener('click', () => guarded(() => verseApply(true)));
+  $('verse-cancel').addEventListener('click', () => guarded(verseCancel));
+  for (const id of ['verse-source', 'verse-quotes', 'verse-taamim', 'verse-no-nikud']) {
+    $(id).addEventListener('change', readVerseOptions);
+  }
 
   $('btn-back').addEventListener('click', () => guarded(() => advance(-1)));
   $('btn-next').addEventListener('click', (e) => guarded(() => advance(+1, { force: e.shiftKey })));
@@ -571,7 +861,9 @@ function wire() {
   $('manual-input').addEventListener('keydown', onManualKey);
   $('session').addEventListener('keydown', onSessionKey);
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && state.session && !$('session').contains(document.activeElement)) stop();
+    if (e.key === 'Escape' && state.session && !state.verse && !$('session').contains(document.activeElement)) stop();
+    else if (e.ctrlKey && e.shiftKey && e.code === 'KeyD') { e.preventDefault(); showTab('dictionary'); }
+    else if (e.ctrlKey && e.shiftKey && e.code === 'KeyS') { e.preventDefault(); showTab('settings'); }
   });
 
   const manualMarks = $('manual-marks');
@@ -636,6 +928,7 @@ function wire() {
 async function init() {
   wire();
   fillSettingsForm();
+  updateClickModeButton();
   state.dict.loadEntries(await loadDictionaryEntries());
   if (state.dict.size === 0) {
     try {
@@ -655,6 +948,7 @@ async function init() {
 if (typeof Office !== 'undefined') {
   Office.onReady((info) => {
     state.inWord = info.host === Office.HostType.Word;
+    registerRibbonActions();
     if (!state.inWord) setStatus('החלונית פתוחה מחוץ ל-Word: אפשר לערוך מילון והגדרות בלבד.');
     init();
   });

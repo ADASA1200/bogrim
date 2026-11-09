@@ -32,6 +32,7 @@
       ranges.add(this);
     }
     load() { return this; }
+    get font() { return (this._font ??= { size: 12, load() { return this; } }); }
     get text() { return doc.text.slice(this.start, this.end); }
     get isEmpty() { return this.start === this.end; }
     getRange(loc = 'Whole') {
@@ -131,7 +132,10 @@
     RequestContext: function () { return makeContext(); },
     run: async (fn) => fn(makeContext()),
   };
+  window.__actions = {};
   window.Office = {
+    actions: { associate: (id, fn) => { window.__actions[id] = fn; } },
+    addin: { showAsTaskpane: async () => {} },
     HostType: { Word: 'Word' },
     onReady: (cb) => { setTimeout(() => cb({ host: 'Word' }), 0); return Promise.resolve({ host: 'Word' }); },
   };

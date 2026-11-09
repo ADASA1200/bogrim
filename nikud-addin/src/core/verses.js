@@ -61,7 +61,7 @@ export function splitVerse(text) {
 }
 
 /** מוריד טעמים, מתג (געיה), פסק וסוף פסוק. */
-const stripCantillation = (s) => stripTaamim(s).replace(/[\u05BD\u05C0\u05C3]/g, '');
+export const stripCantillation = (s) => stripTaamim(s).replace(/[\u05BD\u05C0\u05C3]/g, '');
 
 export class VerseIndex {
   /** @param {{books: Array<{he: string, chapters: string[][]}>}} data */

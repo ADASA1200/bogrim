@@ -146,3 +146,14 @@ button[aria-pressed="true"] { background: var(--sel); border-color: var(--accent
 .settings label { display: block; margin: 3px 0; }
 .settings select { margin-inline-start: 6px; }
 .num { width: 70px; }
+
+.cmd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.cmd { display: flex; align-items: center; gap: 8px; text-align: start; padding: 6px 8px; }
+.cmd img { width: 24px; height: 24px; flex: none; }
+
+.verse-words { display: flex; flex-wrap: wrap; gap: 4px; min-height: 34px; }
+.verse-words span { font: 20px/1.4 var(--hebrew); background: var(--sel); border-radius: 4px; padding: 0 8px; }
+.options.verses li { display: block; font: 18px/1.6 var(--hebrew); padding: 4px 8px; border-bottom: 1px solid var(--line); }
+.options.verses li .ref { font: 600 12px "Segoe UI", sans-serif; color: var(--muted); display: block; }
+.options.verses li mark { background: none; color: var(--accent); font-weight: 700; }
+.verse-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; font-size: 13px; }

@@ -11,7 +11,12 @@
     "sideload": "office-addin-debugging start manifest.xml desktop --no-debug",
     "stop": "office-addin-debugging stop manifest.xml",
     "validate": "office-addin-manifest validate manifest.xml",
-    "build:starter": "node scripts/build-starter.mjs"
+    "build:starter": "node scripts/build-starter.mjs",
+    "build:manifest": "node scripts/build-manifest.mjs",
+    "build:icons": "node scripts/build-icons.cjs",
+    "fetch:tanach": "bash scripts/fetch-tanach.sh .tanach-cache",
+    "build:tanach": "node scripts/build-tanach.mjs .tanach-cache",
+    "test:ui": "node test/ui-smoke.cjs"
   },
   "devDependencies": {
     "http-server": "^14.1.1",

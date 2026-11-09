@@ -45,16 +45,17 @@ export class WordSession {
    * בלי בחירה: מהסמן עד סוף המסמך. עם בחירה: רק הטקסט שנבחר.
    * במצב מילה בודדת: המילה שבה עומד הסמן.
    */
-  async open({ singleWord = false } = {}) {
+  async open({ singleWord = false, requireSelection = false } = {}) {
     this.singleWord = singleWord;
     const ctx = (this.ctx = new Word.RequestContext());
     const sel = ctx.document.getSelection();
     sel.load('isEmpty');
     await ctx.sync();
+    if (requireSelection && sel.isEmpty) return false;
 
     if (singleWord) {
       await this.#openSingleWord(sel);
-      return;
+      return true;
     }
 
     this.scope = sel.isEmpty ? sel.getRange('Start').expandTo(ctx.document.body.getRange('End')) : sel;
@@ -64,6 +65,7 @@ export class WordSession {
     await ctx.sync();
     this.paragraphs = paras.items;
     for (const p of this.paragraphs) ctx.trackedObjects.add(p);
+    return true;
   }
 
   async #openSingleWord(sel) {
@@ -198,6 +200,7 @@ export class WordSession {
 
   /**
    * מחליף רצף מילים בטקסט של פסוק, ואפשר גם להוסיף מירכאות ומקור.
+   * text = null משאיר את המילים כמו שהן.
    * המקור נכתב בגופן קטן ב-4 נקודות מהטקסט.
    */
   async applySpan(items, text, { quotes = false, source = '' } = {}) {
@@ -210,7 +213,8 @@ export class WordSession {
     await ctx.sync();
     const oldText = span.text;
     const size = span.font.size;
-    const body = quotes ? `"${text}"` : text;
+    const core = text ?? oldText; // null: משאירים את הטקסט ומוסיפים רק מקור או מירכאות
+    const body = quotes ? `"${core}"` : core;
     const r = body === oldText ? span : span.insertText(body, 'Replace');
     let src = null;
     if (source) {

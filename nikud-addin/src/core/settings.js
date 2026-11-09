@@ -18,6 +18,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   autosave: true,
   autosaveEvery: 1000,
   preserveFormatting: true,
+  verseSource: true,
+  verseQuotes: false,
+  verseTaamim: false,
+  verseNoNikud: false,
 });
 
 /** הרצת ניקוד על כל הטקסט, ואחריה הגהה. */

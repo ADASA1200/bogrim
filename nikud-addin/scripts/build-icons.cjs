@@ -11,7 +11,7 @@ const path = require('node:path');
   const browser = await chromium.launch();
   const page = await browser.newPage();
   await page.setContent(`<html><body style="margin:0;background:transparent"><div id="i"></div></body></html>`);
-  const font = `"FreeSerif","DejaVu Serif","DejaVu Sans",serif`;
+  const font = `'FreeSerif','DejaVu Serif','DejaVu Sans',serif`;
 
   async function render(file, size, html) {
     await page.evaluate(({ html, size }) => {
@@ -33,7 +33,7 @@ const path = require('node:path');
 
   const markHtml = (m, s) => {
     const glyph = m.standalone ? m.mark : (m.mark.startsWith('‍') ? 'ו' : '◌') + m.mark;
-    return `<div style="position:absolute;inset:${s * 0.03}px;border-radius:${s * 0.14}px;background:#fff;border:${Math.max(1, s * 0.04)}px solid #8a939c;color:#111;display:flex;align-items:center;justify-content:center;font:${s * 0.78}px/1 ${font};box-sizing:border-box" dir="rtl">${glyph}</div>`;
+    return `<div style="position:absolute;inset:${s * 0.03}px;border-radius:${s * 0.14}px;background:#fff;border:${Math.max(1, s * 0.04)}px solid #8a939c;color:#111;display:flex;align-items:center;justify-content:center;font:${s * 0.62}px/1 ${font};box-sizing:border-box" dir="rtl">${glyph}</div>`;
   };
 
   for (const s of [16, 32, 80]) {

@@ -20,10 +20,17 @@
   <!-- ===== ניקוד ===== -->
   <section id="tab-nikud" class="tab" role="tabpanel">
     <div id="idle" class="stack">
-      <p class="hint">העמידו את הסמן לפני הטקסט, או בחרו קטע, והתחילו.</p>
-      <button id="btn-start" class="primary">ניקוד אוטומטי</button>
-      <button id="btn-single">מילה בודדת</button>
-      <button id="btn-add-selection">הוסף מילים מהבחירה למילון</button>
+      <p class="hint">העמידו את הסמן לפני הטקסט, או בחרו קטע, ובחרו פעולה.</p>
+      <div class="cmd-grid">
+        <button id="btn-start" class="cmd" title="F5"><img src="../assets/ribbon/autoNikud-32.png" alt="">ניקוד אוטומטי</button>
+        <button id="btn-single" class="cmd" title="F6"><img src="../assets/ribbon/singleWord-32.png" alt="">מילה בודדת</button>
+        <button id="btn-manual" class="cmd" title="F7"><img src="../assets/ribbon/manualNikud-32.png" alt="">ניקוד ידני</button>
+        <button id="btn-verse" class="cmd" title="F8"><img src="../assets/ribbon/verseNikud-32.png" alt="">ניקוד פסוקים</button>
+        <button id="btn-strip-doc" class="cmd" title="Ctrl+Shift+Delete"><img src="../assets/ribbon/removeNikud-32.png" alt="">מחק ניקוד</button>
+        <button id="btn-add-selection" class="cmd" title="Ctrl+Shift+Insert"><img src="../assets/ribbon/addToDictionary-32.png" alt="">הוסף מילים למילון</button>
+        <button id="btn-open-dict" class="cmd" title="Ctrl+Shift+D"><img src="../assets/ribbon/openDictionary-32.png" alt="">מילון</button>
+        <button id="btn-open-settings" class="cmd" title="Ctrl+Shift+S"><img src="../assets/ribbon/openSettings-32.png" alt="">הגדרות</button>
+      </div>
     </div>
 
     <div id="session" class="stack" hidden>
@@ -38,12 +45,17 @@
       <div class="toolbar" role="toolbar" aria-label="פעולות">
         <button id="btn-back" title="חזור מילה (חץ ימין)">→</button>
         <button id="btn-next" title="דלג (חץ שמאל)">←</button>
-        <button id="btn-always" title="נקד תמיד כך (Ctrl בזמן האישור)" aria-pressed="false">נקד תמיד</button>
         <button id="btn-top" title="העבר לראש הרשימה">⤒</button>
         <button id="btn-up" title="הזז למעלה">↑</button>
         <button id="btn-down" title="הזז למטה">↓</button>
         <button id="btn-delete" title="מחק מהמילון (Delete)">✕</button>
+        <button id="btn-click-mode" title="בחירה בלחיצה אחת או כפולה">{1}</button>
         <button id="btn-undo" title="בטל פעולה אחרונה (Ctrl+Z)">↶</button>
+      </div>
+      <div class="toolbar" role="toolbar" aria-label="פעולות נוספות">
+        <button id="btn-always" title="נקד תמיד כך (Ctrl בזמן האישור)" aria-pressed="false">נקד תמיד</button>
+        <button id="btn-session-verse" title="ניקוד פסוקים (Ctrl+↑)">ניקוד פסוקים</button>
+        <button id="btn-session-settings" title="הגדרות (Ctrl+Shift+S)">הגדרות</button>
         <button id="btn-stop" title="סיום (Esc)">סיום</button>
       </div>
 
@@ -56,6 +68,28 @@
           <button id="btn-continue" title="Shift+Enter">המשך</button>
           <button id="btn-strip-manual" title="Ctrl+Shift+Delete">הסר ניקוד</button>
         </div>
+      </div>
+    </div>
+
+    <div id="verse" class="stack" hidden>
+      <div class="label">מילים לחיפוש (רווח מוסיף מילה, Backspace מוריד)</div>
+      <div id="verse-words" class="verse-words" dir="rtl"></div>
+      <div class="row">
+        <button id="verse-more">הוסף מילה</button>
+        <button id="verse-less">הסר מילה</button>
+        <button id="verse-search" class="primary">חפש כעת</button>
+      </div>
+      <ul id="verse-results" class="options verses" role="listbox" tabindex="0" aria-label="פסוקים שנמצאו"></ul>
+      <div class="verse-opts">
+        <label><input type="checkbox" id="verse-source"> ציין מקור</label>
+        <label><input type="checkbox" id="verse-quotes"> הוסף מירכאות</label>
+        <label><input type="checkbox" id="verse-taamim"> עם טעמים</label>
+        <label><input type="checkbox" id="verse-no-nikud"> ללא ניקוד</label>
+      </div>
+      <div class="row">
+        <button id="verse-ok" class="primary" title="Enter">אישור</button>
+        <button id="verse-full">פסוק שלם</button>
+        <button id="verse-cancel" title="Esc">ביטול</button>
       </div>
     </div>
   </section>

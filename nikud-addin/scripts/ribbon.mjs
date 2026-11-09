@@ -1,7 +1,7 @@
 // הגדרת הכפתורים ברצועת הכלים. משמשת לבניית הסמלים, המניפסט וקיצורי המקשים.
-import { NIKUD, TAAMIM, HOLAM_AFTER_VAV } from '../src/core/marks.js';
+import { NIKUD, TAAMIM, HOLAM_AFTER_VAV, markId } from '../src/core/marks.js';
 
-export const markId = (mark) => 'mark_' + [...mark].map((c) => c.codePointAt(0).toString(16).toUpperCase()).join('_');
+export { markId };
 
 export const COMMANDS = [
   { id: 'autoNikud', label: 'ניקוד אוטומטי', tip: 'ניקוד מהסמן והלאה, או של הקטע שנבחר.', icon: { bg: '#2b579a', glyph: 'אָ', badge: '▶' }, key: 'F5' },

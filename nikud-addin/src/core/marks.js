@@ -61,6 +61,9 @@ export const TAAMIM = [
 /** חולם חסר אחרי ו', כמו במילה מצְו‍ֹת: ZWJ ואחריו חולם. */
 export const HOLAM_AFTER_VAV = { mark: '‍ֹ', name: 'חולם אחרי ו\'' };
 
+/** מזהה הפקודה של סימן ברצועת הכלים, למשל mark_5B0. */
+export const markId = (mark) => 'mark_' + [...mark].map((c) => c.codePointAt(0).toString(16).toUpperCase()).join('_');
+
 /** הסימן לפי מקש, או null. */
 export function markForKey(e) {
   const hit = NIKUD.find((n) => n.code === e.code && !!n.shift === e.shiftKey && !!n.alt === e.altKey);
