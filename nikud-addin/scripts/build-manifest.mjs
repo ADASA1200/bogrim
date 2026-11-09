@@ -1,9 +1,11 @@
 // בונה את manifest.xml ואת shortcuts.json מתוך scripts/ribbon.mjs.
-// שימוש: node scripts/build-manifest.mjs [כתובת-בסיס]   (ברירת מחדל https://localhost:3000)
+// שימוש: node scripts/build-manifest.mjs [כתובת-בסיס] [תיקיית-פלט]
+//   ברירת המחדל: https://localhost:3000, ופלט לתיקיית התוסף.
 import { writeFileSync } from 'node:fs';
 import { COMMANDS, TOOLS, VOWELS, SIGNS, TAAMIM_ITEMS } from './ribbon.mjs';
 
 const BASE = (process.argv[2] || 'https://localhost:3000').replace(/\/$/, '');
+const OUT = process.argv[3] ? new URL(`file://${process.cwd()}/${process.argv[3].replace(/\/?$/, '/')}`) : new URL('../', import.meta.url);
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 
 const images = [];
@@ -130,7 +132,7 @@ const xml = `<?xml version="1.0" encoding="UTF-8"?>
   <ExtendedOverrides Url="${BASE}/shortcuts.json"/>
 </OfficeApp>
 `;
-writeFileSync(new URL('../manifest.xml', import.meta.url), xml);
+writeFileSync(new URL('manifest.xml', OUT), xml);
 
 const shortcuts = {
   actions: [...COMMANDS, ...TOOLS].map((c) => ({ id: c.id, type: 'ExecuteFunction', name: c.label })),
