@@ -196,10 +196,41 @@ export class WordSession {
     item.text = newText;
   }
 
-  /** מבטל את ההחלפה האחרונה. מחזיר את הפריט שהוחזר, או null. */
+  /**
+   * מחליף רצף מילים בטקסט של פסוק, ואפשר גם להוסיף מירכאות ומקור.
+   * המקור נכתב בגופן קטן ב-4 נקודות מהטקסט.
+   */
+  async applySpan(items, text, { quotes = false, source = '' } = {}) {
+    const ctx = this.ctx;
+    const first = items[0];
+    const last = items[items.length - 1];
+    const span = first.range.expandTo(last.range);
+    span.load('text');
+    span.font.load('size');
+    await ctx.sync();
+    const oldText = span.text;
+    const size = span.font.size;
+    const body = quotes ? `"${text}"` : text;
+    const r = body === oldText ? span : span.insertText(body, 'Replace');
+    let src = null;
+    if (source) {
+      src = r.insertText(` (${source})`, 'After');
+      if (typeof size === 'number' && size > 0) src.font.size = Math.max(6, size - 4);
+    }
+    ctx.trackedObjects.add(r);
+    if (src) ctx.trackedObjects.add(src);
+    await ctx.sync();
+    this.undoStack.push({ kind: 'span', items, oldText, oldTexts: items.map((i) => i.text), range: r, src });
+    first.range = r;
+    first.text = body;
+    for (const it of items.slice(1)) it.range = null; // נבלעו בפסוק
+  }
+
+  /** מבטל את הפעולה האחרונה. מחזיר את הפריט שאליו צריך לחזור, או null. */
   async undo() {
     const entry = this.undoStack.pop();
     if (!entry) return null;
+    if (entry.kind === 'span') return this.#undoSpan(entry);
     const { item, oldText, dollarsRange } = entry;
     const r = item.range.insertText(oldText, 'Replace');
     this.ctx.trackedObjects.add(r);
@@ -208,6 +239,32 @@ export class WordSession {
     item.range = r;
     item.text = oldText;
     return item;
+  }
+
+  async #undoSpan({ items, oldText, oldTexts, range, src }) {
+    const ctx = this.ctx;
+    const restored = range.insertText(oldText, 'Replace');
+    if (src) src.insertText('', 'Replace');
+    ctx.trackedObjects.add(restored);
+    // מאתרים מחדש כל מילה בתוך הטקסט המשוחזר
+    let pos = 0;
+    const searches = items.map((it, i) => {
+      const core = oldTexts[i];
+      const at = oldText.indexOf(core, pos);
+      const occ = countOccurrencesBefore(oldText, core, at < 0 ? pos : at);
+      pos = at < 0 ? pos : at + core.length;
+      const res = restored.search(core, { matchCase: true });
+      res.load('items');
+      return { res, occ };
+    });
+    await ctx.sync();
+    items.forEach((it, i) => {
+      const { res, occ } = searches[i];
+      it.range = res.items[occ] ?? res.items[0] ?? null;
+      if (it.range) ctx.trackedObjects.add(it.range);
+      it.text = oldTexts[i];
+    });
+    return items[0];
   }
 
   async save() {
