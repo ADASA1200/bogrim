@@ -36,7 +36,7 @@ function assertEq(actual, expected, msg) {
   const browser = await chromium.launch();
   const page = await browser.newPage();
   const errors = [];
-  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('pageerror', (e) => errors.push(e.message + ' ' + (e.stack || '').split('\n').slice(1, 6).join(' / ')));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   await page.route('https://appsforoffice.microsoft.com/**', (r) => r.fulfill({ body: '', contentType: 'text/javascript' }));
 
@@ -65,12 +65,12 @@ function assertEq(actual, expected, msg) {
   assertEq(pre.every((t) => t === '+'), true, 'ולנתנאל: הצעות מסומנות +');
   await page.keyboard.press('Enter');
 
-  await page.waitForFunction(() => document.getElementById('original').textContent === 'שולחן');
-  assertEq(await page.evaluate(() => document.activeElement.id), 'manual-input', 'מילה חסרה: המיקוד עובר לניקוד ידני');
-  await page.fill('#manual-input', 'שֻׁלְחָן');
+  await page.waitForFunction(() => document.getElementById('mv-original').textContent === 'שולחן' && !document.getElementById('manual-view').hidden);
+  assertEq(await page.evaluate(() => document.activeElement.id), 'mv-input', 'מילה חסרה: נפתח חלון ניקוד ידני גדול');
+  await page.fill('#mv-input', 'שֻׁלְחָן');
   await page.keyboard.press('Enter'); // הוסף והמשך
 
-  await page.waitForFunction(() => document.getElementById('original').textContent === 'ע"ה');
+  await page.waitForFunction(() => document.getElementById('original').textContent === 'ע"ה' && !document.getElementById('session').hidden);
   await page.keyboard.press('Control+z'); // ביטול: חוזר ל"שולחן"
   await page.waitForFunction(() => document.getElementById('original').textContent === 'שולחן');
   assertEq((await doc()).includes('שולחן,'), true, 'ביטול החזיר את המילה המקורית');
@@ -114,6 +114,7 @@ function assertEq(actual, expected, msg) {
   });
   await page.click('[data-tab=settings]');
   await page.click('[data-preset=default]');
+  await page.check('input[name=whenNone][value=manual]'); // חלון ידני קטן
   await page.click('[data-tab=nikud]');
   await page.click('#btn-start');
   await page.waitForFunction(() => document.getElementById('original').textContent === 'כמו');
@@ -169,10 +170,35 @@ function assertEq(actual, expected, msg) {
     window.__fakeDoc.selStart = window.__fakeDoc.selEnd = 0;
   });
   await page.click('#btn-manual');
-  await page.waitForFunction(() => document.getElementById('original').textContent === 'משה');
-  assertEq(await page.evaluate(() => document.activeElement.id), 'manual-input', 'ניקוד ידני: המיקוד בשדה הידני');
-  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.getElementById('mv-original').textContent === 'משה');
+  assertEq(await page.evaluate(() => document.activeElement.id), 'mv-input', 'ניקוד ידני: נפתח החלון הגדול');
+  await page.keyboard.press('Control+ArrowLeft'); // הוסף ועבור, ונשארים בניקוד הידני
+  await page.waitForFunction(() => document.getElementById('mv-original').textContent === 'דוד');
+  await page.click('#mv-drop');
+  assertEq(await page.evaluate(() => !document.getElementById('mv-list').hidden), true, 'רשימת האפשרויות נפתחת');
+  await page.click('#mv-list li');
+  await page.click('#mv-continue');
   await page.waitForFunction(() => !document.getElementById('idle').hidden);
+  assertEq(n(await doc()), n('מֹשֶׁה דָּוִד'), 'ניקוד ידני: שתי המילים נוקדו');
+
+  // התאמה אישית נשמרת בנפרד מהקבוצות המוכנות
+  await page.click('[data-tab=settings]');
+  await page.check('input[name=skipCurly]');
+  await page.click('[data-preset=run]');
+  assertEq(await page.isChecked('input[name=skipCurly]'), false, 'הרצת ניקוד: בלי ההגדרה האישית');
+  await page.click('[data-preset=custom]');
+  assertEq(await page.isChecked('input[name=skipCurly]'), true, 'התאמה אישית חוזרת');
+
+  // תיקון סדר הניקוד
+  await page.evaluate(() => {
+    window.__fakeDoc.text = 'ש\u05B8\u05C1\u05BC';
+    window.__fakeDoc.selStart = 0;
+    window.__fakeDoc.selEnd = window.__fakeDoc.text.length;
+  });
+  await page.click('[data-tab=keyboard]');
+  await page.click('#btn-fix-order-kb');
+  await page.waitForFunction(() => window.__fakeDoc.text === 'ש\u05C1\u05BC\u05B8');
+  console.log('ok - תיקון סדר הניקוד');
 
   await page.setViewportSize({ width: 340, height: 900 });
   await page.click('[data-tab=nikud]');

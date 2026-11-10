@@ -143,7 +143,8 @@ test('החלטה: ברירת מחדל מול הרצת ניקוד', () => {
   assert.equal(run('לימד', RUN_PRESET).action, 'skip'); // כתיב חסר בהרצה: אל תשנה
   assert.equal(run('לימד', { ...RUN_PRESET, spellingMode: 'apply' }).action, 'apply');
   assert.equal(run('רז"ל', S).action, 'ask');            // פתיחת ר"ת: שאל
-  assert.equal(run('ב', S).action, 'skip');              // אות בודדת
+  assert.equal(run('ב', S).action, 'manual');            // ברירת המחדל: לא מדלגים על אות בודדת
+  assert.equal(run('ב', { ...S, skipSingleLetters: true }).action, 'skip');
   assert.equal(run('מֹשֶׁה', RUN_PRESET).action, 'skip'); // מילה מנוקדת
   assert.equal(run('מֹשֶׁה', S).action, 'apply');
 

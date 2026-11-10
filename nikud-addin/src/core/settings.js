@@ -2,7 +2,7 @@
 
 export const DEFAULT_SETTINGS = Object.freeze({
   whenMultiple: 'ask',      // 'ask' | 'first'
-  whenNone: 'manual',       // 'manual' | 'next'
+  whenNone: 'bigManual',    // 'next' | 'manual' (חלון קטן) | 'bigManual' (חלון גדול)
   askSingle: false,
   singleClick: true,
   addPrefixes: true,
@@ -10,7 +10,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   abbreviationMode: 'ask',  // 'ask' | 'apply' | 'skip'
   spellingMode: 'ask',      // 'ask' | 'apply' | 'skip'
   skipVocalized: false,
-  skipSingleLetters: true,
+  skipSingleLetters: false,
   skipAbbreviations: false,
   skipRound: false,
   skipSquare: false,
@@ -43,7 +43,7 @@ export function sanitizeSettings(raw) {
     if (typeof s[k] !== typeof v) s[k] = v;
   }
   if (!['ask', 'first'].includes(s.whenMultiple)) s.whenMultiple = 'ask';
-  if (!['manual', 'next'].includes(s.whenNone)) s.whenNone = 'manual';
+  if (!['manual', 'next', 'bigManual'].includes(s.whenNone)) s.whenNone = 'bigManual';
   for (const k of ['abbreviationMode', 'spellingMode']) {
     if (!['ask', 'apply', 'skip'].includes(s[k])) s[k] = 'ask';
   }

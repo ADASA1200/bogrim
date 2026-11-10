@@ -157,3 +157,108 @@ button[aria-pressed="true"] { background: var(--sel); border-color: var(--accent
 .options.verses li .ref { font: 600 12px "Segoe UI", sans-serif; color: var(--muted); display: block; }
 .options.verses li mark { background: none; color: var(--accent); font-weight: 700; }
 .verse-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; font-size: 13px; }
+
+/* ===== חלון "ניקוד אוטומטי" ===== */
+:root { --word: #1c3fbf; --red: #c62828; --purple: #7b1fa2; --green: #2e7d32; --win: #f0f0f0; }
+@media (prefers-color-scheme: dark) {
+  :root { --word: #8fb0ff; --red: #ff8a80; --purple: #ce93d8; --green: #81c784; --win: #262a2f; }
+}
+.auto-win, .manual-win {
+  background: var(--win);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.aw-top { display: grid; grid-template-columns: 56px 1fr; gap: 6px; }
+.aw-always { font-size: 12px; line-height: 1.2; padding: 4px; }
+.aw-original, .mw-original {
+  font: 700 22px/1.4 var(--hebrew);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  text-align: center;
+  padding: 2px 6px;
+  min-height: 36px;
+}
+.aw-main { display: grid; grid-template-columns: 56px 1fr; gap: 6px; }
+.aw-side { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.aw-btn { font: 700 20px/1 "Segoe UI", sans-serif; padding: 6px 0; }
+.aw-btn.small { font-size: 14px; }
+.aw-btn.blue { color: var(--word); }
+.aw-btn.red { color: var(--red); }
+.aw-list { min-height: 230px; max-height: 340px; }
+.aw-list li, .mw-list li { color: var(--word); }
+.aw-list li.manual-item { font-size: 20px; color: var(--word); opacity: .85; }
+.aw-row3 { display: grid; grid-template-columns: 56px 1fr 56px; gap: 6px; }
+.aw-row2 { display: grid; grid-template-columns: 56px 1fr; gap: 6px; }
+.aw-row2:last-of-type { grid-template-columns: 1fr 1.6fr; }
+.aw-arrow { font-size: 18px; color: var(--word); padding: 2px 0; }
+.aw-undo { font-size: 18px; color: var(--word); }
+.aw-red-text { color: var(--red); font-weight: 700; }
+.aw-purple-text { color: var(--purple); font-weight: 700; }
+.aw-green-text { color: var(--green); font-weight: 700; font-size: 12px; padding: 4px 2px; }
+.aw-blue-text { color: var(--word); font-weight: 700; }
+.aw-input {
+  font: 22px/1.4 var(--hebrew);
+  color: var(--word);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--bg);
+  padding: 2px 8px;
+  width: 100%;
+}
+.aw-foot { display: flex; gap: 12px; justify-content: space-between; align-items: center; font-size: 12px; }
+button.link { background: none; border: 0; color: var(--muted); text-decoration: underline; padding: 0; }
+
+/* ===== חלון "ניקוד ידני" הגדול ===== */
+.mw-top { display: grid; grid-template-columns: auto 1fr auto; gap: 6px; align-items: center; }
+.mw-arrows { display: flex; gap: 2px; }
+.mw-arrows button { min-width: 34px; }
+.mw-mid { display: grid; grid-template-columns: 64px 1fr 64px; gap: 6px; align-items: start; }
+.mw-col { display: flex; flex-direction: column; gap: 6px; }
+.mw-col button { font-size: 11px; padding: 5px 1px; }
+.mw-field { position: relative; display: flex; }
+.mw-input {
+  font: 700 24px/1.3 var(--hebrew);
+  color: var(--word);
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-inline-end: 0;
+  border-radius: 0 3px 3px 0;
+  background: var(--bg);
+  padding: 4px 6px;
+}
+.mw-drop { border-radius: 3px 0 0 3px; padding: 0 6px; }
+.mw-list { position: absolute; top: 100%; inset-inline: 0; z-index: 5; max-height: 260px; min-height: 0; box-shadow: 0 4px 12px rgba(0,0,0,.2); }
+.mw-marks { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.mw-marks button { min-width: 0; }
+.mw-foot { display: flex; justify-content: flex-start; gap: 8px; }
+
+/* ===== הגדרות ===== */
+.presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.presets button[aria-pressed="true"] { background: var(--sel); border-color: var(--accent); font-weight: 600; }
+.settings-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0 8px; }
+.settings .inline { display: flex; flex-wrap: wrap; gap: 0 10px; }
+.settings .inline label { display: inline-block; }
+.settings legend { color: var(--word); }
+.settings-foot { display: flex; justify-content: flex-start; margin-top: 6px; }
+
+/* ===== מילון ===== */
+.dict-top { display: grid; grid-template-columns: auto 1fr auto; gap: 6px; align-items: center; }
+.dict-search {
+  font: 22px/1.3 var(--hebrew);
+  color: var(--word);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--bg);
+  padding: 2px 8px;
+  min-width: 0;
+}
+.dict-cols { grid-template-columns: 1fr 1.3fr 44px !important; }
+#dict-values li { color: var(--word); }
+
+details.more summary { cursor: pointer; color: var(--muted); font-size: 13px; margin: 4px 0; }

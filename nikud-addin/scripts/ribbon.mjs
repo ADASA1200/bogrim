@@ -11,10 +11,10 @@ export const COMMANDS = [
 ];
 
 export const TOOLS = [
+  { id: 'openSettings', label: 'הגדרות', tip: 'הגדרות הניקוד.', icon: { bg: '#555b63', glyph: '⚙' }, key: 'Ctrl+Shift+S' },
+  { id: 'openDictionary', label: 'מילון', tip: 'צפייה ועריכה של המילון.', icon: { bg: '#6a3d9a', glyph: 'מ' }, key: 'Ctrl+Shift+D' },
   { id: 'removeNikud', label: 'מחק ניקוד', tip: 'הסרת הניקוד מהטקסט שנבחר.', icon: { bg: '#b42318', glyph: 'אָ', badge: '✕' }, key: 'Ctrl+Shift+Delete' },
   { id: 'addToDictionary', label: 'הוסף מילים למילון', tip: 'כל המילים המנוקדות שבבחירה נכנסות למילון.', icon: { bg: '#6a3d9a', glyph: 'מ', badge: '+' }, key: 'Ctrl+Shift+Insert' },
-  { id: 'openDictionary', label: 'מילון', tip: 'צפייה ועריכה של המילון.', icon: { bg: '#6a3d9a', glyph: 'מ' }, key: 'Ctrl+Shift+D' },
-  { id: 'openSettings', label: 'הגדרות', tip: 'הגדרות הניקוד.', icon: { bg: '#555b63', glyph: '⚙' }, key: 'Ctrl+Shift+S' },
 ];
 
 const vowelMarks = ['ְ', 'ֱ', 'ֲ', 'ֳ', 'ִ', 'ֵ', 'ֶ', 'ַ', 'ָ', 'ׇ', 'ֹ', 'ֻ'];

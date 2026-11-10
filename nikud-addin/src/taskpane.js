@@ -3,14 +3,15 @@
 
 import { Dictionary } from './core/dictionary.js';
 import { suggest, decide, insideSkippedBrackets } from './core/analyzer.js';
-import { hasNikud, makeKey, normalizeMarks, stripMarks } from './core/hebrew.js';
+import { hasNikud, makeKey, normalizeMarks, stripMarks, isMark } from './core/hebrew.js';
 import { PRESETS, sanitizeSettings } from './core/settings.js';
 import { NIKUD, TAAMIM, HOLAM_AFTER_VAV, markForKey, keyLabel, markId } from './core/marks.js';
 import { VerseIndex, stripCantillation } from './core/verses.js';
 import {
   loadDictionaryEntries, saveDictionaryChanges, clearDictionaryStore, loadSettings, saveSettings,
+  loadCustomSettings, saveCustomSettings,
 } from './storage.js';
-import { WordSession, insertAtCursor, stripSelection, getSelectionText } from './word-session.js';
+import { WordSession, insertAtCursor, stripSelection, fixOrderSelection, getSelectionText } from './word-session.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -22,6 +23,8 @@ const state = {
   session: null,
   single: false,
   manualMode: false,
+  /** קבוצת ההגדרות שנבחרה: default | run | custom */
+  preset: 'custom',
   /** חלון הפסוקים הפתוח: {standalone, start, count, results, selected} */
   verse: null,
   /** @type {VerseIndex|null} */
@@ -131,6 +134,7 @@ function finish(msg = 'הניקוד הסתיים.') {
   state.verse = null;
   $('verse').hidden = true;
   $('session').hidden = true;
+  $('manual-view').hidden = true;
   $('idle').hidden = false;
   setStatus(msg);
   persist();
@@ -161,8 +165,8 @@ async function advance(dir, { force = false } = {}) {
     if (!item.range) continue; // מילה שנבלעה בפסוק
     const suggestions = suggest(item.key, state.dict, state.settings);
 
-    if (state.manualMode) return show(item, suggestions, 'manual');
-    if (dir < 0 || force) return show(item, suggestions, suggestions.length ? 'ask' : 'manual');
+    if (state.manualMode) return show(item, suggestions, 'bigManual');
+    if (dir < 0 || force) return show(item, suggestions, suggestions.length ? 'ask' : noOptionsMode());
 
     const d = decide({
       core: item.text,
@@ -174,7 +178,7 @@ async function advance(dir, { force = false } = {}) {
     if (d.action === 'apply') {
       if (d.text !== item.text) await applyTo(item, d.text);
     } else if (d.action !== 'skip') {
-      return show(item, suggestions, d.action);
+      return show(item, suggestions, d.action === 'manual' ? noOptionsMode() : d.action);
     }
     dir = +1;
     // לתת לחלונית להגיב (Esc, ציור המונה) גם בהרצה ארוכה
@@ -193,15 +197,25 @@ async function applyTo(item, text, { dollars = false } = {}) {
   }
 }
 
+/** מה מציגים כשאין למילה אפשרויות: החלון הידני הקטן או הגדול. */
+const noOptionsMode = () => (state.settings.whenNone === 'bigManual' ? 'bigManual' : 'manual');
+
+/**
+ * מציג מילה. mode: 'ask' (רשימת האפשרויות), 'manual' (החלון הידני הקטן),
+ * 'bigManual' (חלון "ניקוד ידני" הגדול).
+ */
 async function show(item, suggestions, mode) {
   state.options = suggestions;
   state.selected = 0;
   $('original').textContent = item.text;
-  $('counter').textContent = `${state.index + 1}`;
+  $('counter').textContent = `מילה ${state.index + 1}`;
   renderOptions();
   setManual(suggestions[0]?.text ?? item.text);
-  setStatus(mode === 'manual' && !state.manualMode && !suggestions.length ? 'המילה אינה במילון. נקדו ידנית או המשיכו.' : '');
+  setStatus(mode !== 'ask' && !state.manualMode && !suggestions.length ? 'המילה אינה במילון. נקדו ידנית או המשיכו.' : '');
   await state.session.select(item);
+  if (mode === 'bigManual') return showManualView(item, suggestions);
+  $('manual-view').hidden = true;
+  $('session').hidden = false;
   if (mode === 'manual') focusManual();
   else $('options').focus();
 }
@@ -209,11 +223,13 @@ async function show(item, suggestions, mode) {
 function renderOptions() {
   const ul = $('options');
   ul.replaceChildren();
+  const manualItem = document.createElement('li');
+  manualItem.className = 'manual-item';
+  manualItem.textContent = 'ניקוד ידני…';
+  manualItem.title = 'פתיחת חלון ניקוד ידני גדול';
+  manualItem.addEventListener('click', () => guarded(openManualForCurrent));
   if (!state.options.length) {
-    const li = document.createElement('li');
-    li.className = 'empty';
-    li.textContent = 'אין אפשרויות במילון';
-    ul.appendChild(li);
+    ul.appendChild(manualItem);
     return;
   }
   state.options.forEach((opt, i) => {
@@ -239,14 +255,15 @@ function renderOptions() {
     });
     ul.appendChild(li);
   });
+  ul.appendChild(manualItem);
 }
 
 function select(i) {
   const n = state.options.length;
   if (!n) return;
   state.selected = ((i % n) + n) % n;
-  const lis = $('options').children;
-  for (let k = 0; k < lis.length; k++) lis[k].setAttribute('aria-selected', String(k === state.selected));
+  const lis = $('options').querySelectorAll('li[role=option]');
+  lis.forEach((li, k) => li.setAttribute('aria-selected', String(k === state.selected)));
   lis[state.selected]?.scrollIntoView({ block: 'nearest' });
   setManual(state.options[state.selected].text);
 }
@@ -277,10 +294,10 @@ function setAlwaysToggle(on) {
 }
 
 /** "הוסף והמשך": מכניס את הניקוד לטקסט וגם למילון. */
-async function manualCommit(addToDict) {
+async function manualCommit(addToDict, inputId = 'manual-input') {
   const item = currentItem();
   if (!item) return;
-  const text = normalizeMarks($('manual-input').value.trim());
+  const text = normalizeMarks($(inputId).value.trim());
   if (text && addToDict && (hasNikud(text) || makeKey(text) !== item.key)) {
     if (state.dict.add(text, item.key)) await persist();
   }
@@ -332,12 +349,121 @@ function stop() {
   else finish('הניקוד הופסק.');
 }
 
-function insertIntoManual(mark) {
-  const inp = $('manual-input');
+function insertIntoManual(mark, inputId = 'manual-input') {
+  const inp = $(inputId);
   const start = inp.selectionStart ?? inp.value.length;
   const end = inp.selectionEnd ?? start;
   inp.setRangeText(mark, start, end, 'end');
   inp.focus();
+}
+
+
+// ---------- חלון "ניקוד ידני" הגדול ----------
+
+function showManualView(item, suggestions) {
+  $('session').hidden = true;
+  $('manual-view').hidden = false;
+  $('mv-original').textContent = item.text;
+  $('mv-input').value = suggestions[0]?.text ?? item.text;
+  renderMvList(suggestions);
+  toggleMvList(false);
+  const inp = $('mv-input');
+  inp.focus();
+  inp.setSelectionRange(inp.value.length, inp.value.length);
+}
+
+/** "ניקוד ידני…" ברשימה: פותח את החלון הגדול על המילה הנוכחית. */
+async function openManualForCurrent() {
+  const item = currentItem();
+  if (item) showManualView(item, state.options);
+}
+
+function renderMvList(suggestions) {
+  const ul = $('mv-list');
+  ul.replaceChildren();
+  for (const opt of suggestions) {
+    const li = document.createElement('li');
+    li.setAttribute('role', 'option');
+    li.textContent = opt.text;
+    li.addEventListener('mousedown', (e) => e.preventDefault());
+    li.addEventListener('click', () => {
+      $('mv-input').value = opt.text;
+      toggleMvList(false);
+      $('mv-input').focus();
+    });
+    ul.appendChild(li);
+  }
+  $('mv-drop').disabled = !suggestions.length;
+}
+
+function toggleMvList(open = $('mv-list').hidden) {
+  const can = $('mv-list').children.length > 0;
+  $('mv-list').hidden = !(open && can);
+  $('mv-drop').setAttribute('aria-expanded', String(open && can));
+}
+
+/** "הוסף למילון": מוסיף בלי להכניס למסמך ובלי לעבור מילה. */
+async function mvAddOnly() {
+  const item = currentItem();
+  if (!item) return;
+  const text = normalizeMarks($('mv-input').value.trim());
+  if (!text || !(hasNikud(text) || makeKey(text) !== item.key)) return setStatus('נקדו את המילה לפני ההוספה למילון.');
+  const ok = state.dict.add(text, item.key);
+  await persist();
+  setStatus(ok ? `"${text}" נוספה למילון.` : 'המילה כבר במילון.');
+}
+
+/** ← : הוספה למילון ומעבר למילה הבאה, ונשארים בניקוד הידני. */
+async function mvNext() {
+  state.manualMode = true;
+  await manualCommit(true, 'mv-input');
+}
+
+async function mvPrev() {
+  state.manualMode = true;
+  await advance(-1);
+}
+
+/** "בטל": מוריד את סימן הניקוד האחרון שלפני הסמן. */
+function mvUndoMark() {
+  const inp = $('mv-input');
+  const pos = inp.selectionStart ?? inp.value.length;
+  if (pos > 0 && isMark(inp.value[pos - 1])) {
+    inp.setRangeText('', pos - 1, pos, 'end');
+  }
+  inp.focus();
+}
+
+async function mvClose() {
+  if (state.manualMode || state.single) return finish('');
+  const item = currentItem();
+  if (item) await show(item, state.options, 'ask');
+}
+
+function onMvKey(e) {
+  const mark = !e.ctrlKey ? markForKey(e) : null;
+  if (mark) {
+    e.preventDefault();
+    return insertIntoManual(mark, 'mv-input');
+  }
+  const run = (fn) => {
+    e.preventDefault();
+    guarded(fn);
+  };
+  if (e.key === 'Escape') return run(mvClose);
+  if (e.key === 'Enter') {
+    if (!$('mv-list').hidden) { e.preventDefault(); return toggleMvList(false); }
+    return run(() => manualCommit(!e.shiftKey, 'mv-input'));
+  }
+  if (e.ctrlKey && e.shiftKey && e.key === 'Delete') {
+    e.preventDefault();
+    $('mv-input').value = stripMarks($('mv-input').value);
+    return;
+  }
+  if (e.ctrlKey && e.key === 'ArrowLeft') return run(mvNext);
+  if (e.ctrlKey && e.key === 'ArrowRight') return run(mvPrev);
+  if (e.ctrlKey && e.key === 'ArrowUp') return run(() => openVerse(false));
+  if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); toggleMvList(true); }
 }
 
 // ---------- מקשים בתוך תהליך הניקוד ----------
@@ -450,6 +576,7 @@ async function openVerse(standalone) {
   }
   $('idle').hidden = true;
   $('session').hidden = true;
+  $('manual-view').hidden = true;
   $('verse').hidden = false;
   $('verse-source').checked = state.settings.verseSource;
   $('verse-quotes').checked = state.settings.verseQuotes;
@@ -580,7 +707,7 @@ async function verseCancel() {
   if (v.standalone) return finish('');
   closeVerse();
   const item = currentItem();
-  if (item) await show(item, suggest(item.key, state.dict, state.settings), state.manualMode ? 'manual' : 'ask');
+  if (item) await show(item, suggest(item.key, state.dict, state.settings), state.manualMode ? 'bigManual' : 'ask');
 }
 
 function onVerseKey(e) {
@@ -608,6 +735,12 @@ async function stripDocSelection() {
   if (!requireWord()) return;
   const n = await stripSelection();
   setStatus(n ? `הוסר ניקוד מ-${n} מילים.` : 'לא נמצא ניקוד בבחירה.');
+}
+
+async function fixOrderDoc() {
+  if (!requireWord()) return;
+  const n = await fixOrderSelection();
+  setStatus(n ? `תוקן סדר הניקוד ב-${n} מילים.` : 'סדר הניקוד בבחירה תקין.');
 }
 
 async function addSelectionToDict() {
@@ -805,11 +938,16 @@ function readSettingsForm() {
   return sanitizeSettings(out);
 }
 
-function applySettings(s) {
+function applySettings(s, { preset = state.preset } = {}) {
   state.settings = sanitizeSettings(s);
+  state.preset = preset;
   saveSettings(state.settings);
+  if (preset === 'custom') saveCustomSettings(state.settings);
   fillSettingsForm();
   updateClickModeButton();
+  for (const b of document.querySelectorAll('[data-preset]')) {
+    b.setAttribute('aria-pressed', String(b.dataset.preset === preset));
+  }
 }
 
 // ---------- אתחול ----------
@@ -861,14 +999,35 @@ function wire() {
   $('manual-input').addEventListener('keydown', onManualKey);
   $('session').addEventListener('keydown', onSessionKey);
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && state.session && !state.verse && !$('session').contains(document.activeElement)) stop();
+    if ((e.key === 'Pause' || e.key === 'Cancel') && state.session) { e.preventDefault(); stop(); }
+    else if (e.key === 'Escape' && state.session && !state.verse && !$('session').contains(document.activeElement) && $('manual-view').hidden) stop();
     else if (e.ctrlKey && e.shiftKey && e.code === 'KeyD') { e.preventDefault(); showTab('dictionary'); }
     else if (e.ctrlKey && e.shiftKey && e.code === 'KeyS') { e.preventDefault(); showTab('settings'); }
   });
 
-  const manualMarks = $('manual-marks');
-  for (const n of NIKUD) markButton(manualMarks, n, insertIntoManual, keyLabel(n));
-  markButton(manualMarks, HOLAM_AFTER_VAV, insertIntoManual);
+  const mvMarks = $('mv-marks');
+  const toMv = (m) => insertIntoManual(m, 'mv-input');
+  for (const n of NIKUD) markButton(mvMarks, n, toMv, keyLabel(n));
+  markButton(mvMarks, HOLAM_AFTER_VAV, toMv);
+
+  $('mv-input').addEventListener('keydown', onMvKey);
+  $('mv-drop').addEventListener('mousedown', (e) => e.preventDefault());
+  $('mv-drop').addEventListener('click', () => toggleMvList());
+  $('mv-add').addEventListener('click', () => guarded(mvAddOnly));
+  $('mv-add-continue').addEventListener('click', () => guarded(() => manualCommit(true, 'mv-input')));
+  $('mv-continue').addEventListener('click', () => guarded(() => manualCommit(false, 'mv-input')));
+  $('mv-next').addEventListener('click', () => guarded(mvNext));
+  $('mv-prev').addEventListener('click', () => guarded(mvPrev));
+  $('mv-strip').addEventListener('click', () => {
+    $('mv-input').value = stripMarks($('mv-input').value);
+    $('mv-input').focus();
+  });
+  $('mv-undo-mark').addEventListener('click', mvUndoMark);
+  $('mv-verse').addEventListener('click', () => guarded(() => openVerse(false)));
+  $('mv-close').addEventListener('click', () => guarded(mvClose));
+  $('btn-fix-order').addEventListener('click', () => guarded(fixOrderDoc));
+  $('btn-fix-order-kb').addEventListener('click', () => guarded(fixOrderDoc));
+  $('btn-backup').addEventListener('click', () => guarded(dictExport));
 
   const kbN = $('kb-nikud');
   const kbT = $('kb-taamim');
@@ -916,19 +1075,38 @@ function wire() {
   });
   $('dict-clear').addEventListener('click', () => guarded(dictClear));
 
-  $('settings-form').addEventListener('change', () => applySettings(readSettingsForm()));
+  // שינוי ידני בטופס הוא "התאמה אישית", ונשמר בנפרד מהקבוצות המוכנות
+  $('settings-form').addEventListener('change', () => applySettings(readSettingsForm(), { preset: 'custom' }));
   for (const b of document.querySelectorAll('[data-preset]')) {
     b.addEventListener('click', () => {
-      applySettings(PRESETS[b.dataset.preset]);
-      setStatus(b.dataset.preset === 'run' ? 'הוגדרה הרצת ניקוד.' : 'הוחזרו הגדרות ברירת המחדל.');
+      const name = b.dataset.preset;
+      if (name === 'custom') {
+        applySettings(loadCustomSettings() ?? state.settings, { preset: 'custom' });
+        setStatus('הוחזרו ההגדרות האישיות.');
+      } else {
+        applySettings(PRESETS[name], { preset: name });
+        setStatus(name === 'run' ? 'הוגדרה הרצת ניקוד.' : 'הוחזרו הגדרות ברירת המחדל.');
+      }
     });
   }
+  $('settings-dict').addEventListener('click', () => showTab('dictionary'));
+  $('settings-help').addEventListener('click', () => {
+    const url = new URL('../README.md', location.href).href;
+    try {
+      Office.context.ui.openBrowserWindow(url);
+    } catch {
+      window.open(url, '_blank');
+    }
+  });
+  $('settings-continue').addEventListener('click', () => {
+    showTab('nikud');
+    if (state.session) (document.querySelector('#session:not([hidden]) #options') ?? $('mv-input')).focus();
+  });
 }
 
 async function init() {
   wire();
-  fillSettingsForm();
-  updateClickModeButton();
+  applySettings(state.settings, { preset: 'custom' });
   state.dict.loadEntries(await loadDictionaryEntries());
   if (state.dict.size === 0) {
     try {

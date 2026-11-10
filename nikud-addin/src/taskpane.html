@@ -26,48 +26,88 @@
         <button id="btn-single" class="cmd" title="F6"><img src="../assets/ribbon/singleWord-32.png" alt="">מילה בודדת</button>
         <button id="btn-manual" class="cmd" title="F7"><img src="../assets/ribbon/manualNikud-32.png" alt="">ניקוד ידני</button>
         <button id="btn-verse" class="cmd" title="F8"><img src="../assets/ribbon/verseNikud-32.png" alt="">ניקוד פסוקים</button>
+        <button id="btn-open-settings" class="cmd" title="Ctrl+Shift+S"><img src="../assets/ribbon/openSettings-32.png" alt="">הגדרות</button>
+        <button id="btn-open-dict" class="cmd" title="Ctrl+Shift+D"><img src="../assets/ribbon/openDictionary-32.png" alt="">מילון</button>
         <button id="btn-strip-doc" class="cmd" title="Ctrl+Shift+Delete"><img src="../assets/ribbon/removeNikud-32.png" alt="">מחק ניקוד</button>
         <button id="btn-add-selection" class="cmd" title="Ctrl+Shift+Insert"><img src="../assets/ribbon/addToDictionary-32.png" alt="">הוסף מילים למילון</button>
-        <button id="btn-open-dict" class="cmd" title="Ctrl+Shift+D"><img src="../assets/ribbon/openDictionary-32.png" alt="">מילון</button>
-        <button id="btn-open-settings" class="cmd" title="Ctrl+Shift+S"><img src="../assets/ribbon/openSettings-32.png" alt="">הגדרות</button>
+      </div>
+      <details class="more">
+        <summary>עוד</summary>
+        <div class="row">
+          <button id="btn-fix-order">תיקון סדר הניקוד</button>
+          <button id="btn-backup">צור גיבוי לקבצי המילון</button>
+        </div>
+      </details>
+    </div>
+
+    <!-- חלון "ניקוד אוטומטי" -->
+    <div id="session" class="auto-win" hidden>
+      <div class="aw-top">
+        <button id="btn-always" class="aw-always" title="נקד תמיד כך (Ctrl בזמן האישור)" aria-pressed="false">נקד<br>תמיד</button>
+        <div id="original" class="aw-original" title="המילה כפי שהיא במסמך"></div>
+      </div>
+      <div class="aw-main">
+        <div class="aw-side" role="toolbar" aria-label="סידור המילון">
+          <button id="btn-top" class="aw-btn blue" title="העבר לראש הרשימה">⤒</button>
+          <button id="btn-up" class="aw-btn blue" title="הזז למעלה">↑</button>
+          <button id="btn-down" class="aw-btn blue" title="הזז למטה">↓</button>
+          <button id="btn-delete" class="aw-btn red" title="מחק מהמילון (Delete)">✕</button>
+          <button id="btn-click-mode" class="aw-btn blue small" title="בחירה בלחיצה אחת או כפולה">{1}</button>
+        </div>
+        <ul id="options" class="options aw-list" role="listbox" tabindex="0" aria-label="אפשרויות ניקוד"></ul>
+      </div>
+      <div class="aw-row3">
+        <button id="btn-back" class="aw-arrow" title="חזור מילה (חץ ימין)">➡</button>
+        <button id="btn-session-settings" class="aw-red-text" title="הגדרות (Ctrl+Shift+S)">הגדרות</button>
+        <button id="btn-next" class="aw-arrow" title="דלג (חץ שמאל)">⬅</button>
+      </div>
+      <div class="aw-row2">
+        <button id="btn-undo" class="aw-undo" title="בטל פעולה אחרונה (Ctrl+Z)">↶</button>
+        <button id="btn-session-verse" class="aw-purple-text" title="ניקוד פסוקים (Ctrl+↑)">ניקוד פסוקים</button>
+      </div>
+      <div class="aw-row2 aw-manual">
+        <button id="btn-strip-manual" class="aw-green-text" title="הסר ניקוד (Ctrl+Shift+Delete)">הסר ניקוד</button>
+        <input id="manual-input" class="aw-input" dir="rtl" autocomplete="off" spellcheck="false" aria-label="ניקוד ידני (Ctrl+↓)" title="ניקוד ידני: מקשי המספרים (Ctrl+↓)">
+      </div>
+      <div class="aw-row2">
+        <button id="btn-continue" class="aw-blue-text" title="Shift+Enter">המשך</button>
+        <button id="btn-add-continue" class="aw-blue-text" title="Enter">הוסף והמשך</button>
+      </div>
+      <div class="aw-foot">
+        <span id="counter" class="counter"></span>
+        <button id="btn-stop" class="link" title="סגירה (Esc)">סגור</button>
       </div>
     </div>
 
-    <div id="session" class="stack" hidden>
-      <div class="original-row">
-        <span class="label">במסמך:</span>
-        <span id="original" class="original"></span>
-        <span id="counter" class="counter"></span>
-      </div>
-
-      <ul id="options" class="options" role="listbox" tabindex="0" aria-label="אפשרויות ניקוד"></ul>
-
-      <div class="toolbar" role="toolbar" aria-label="פעולות">
-        <button id="btn-back" title="חזור מילה (חץ ימין)">→</button>
-        <button id="btn-next" title="דלג (חץ שמאל)">←</button>
-        <button id="btn-top" title="העבר לראש הרשימה">⤒</button>
-        <button id="btn-up" title="הזז למעלה">↑</button>
-        <button id="btn-down" title="הזז למטה">↓</button>
-        <button id="btn-delete" title="מחק מהמילון (Delete)">✕</button>
-        <button id="btn-click-mode" title="בחירה בלחיצה אחת או כפולה">{1}</button>
-        <button id="btn-undo" title="בטל פעולה אחרונה (Ctrl+Z)">↶</button>
-      </div>
-      <div class="toolbar" role="toolbar" aria-label="פעולות נוספות">
-        <button id="btn-always" title="נקד תמיד כך (Ctrl בזמן האישור)" aria-pressed="false">נקד תמיד</button>
-        <button id="btn-session-verse" title="ניקוד פסוקים (Ctrl+↑)">ניקוד פסוקים</button>
-        <button id="btn-session-settings" title="הגדרות (Ctrl+Shift+S)">הגדרות</button>
-        <button id="btn-stop" title="סיום (Esc)">סיום</button>
-      </div>
-
-      <div class="manual">
-        <label for="manual-input" class="label">ניקוד ידני (Ctrl+↓)</label>
-        <input id="manual-input" class="manual-input" dir="rtl" autocomplete="off" spellcheck="false">
-        <div id="manual-marks" class="marks"></div>
-        <div class="row">
-          <button id="btn-add-continue" class="primary" title="Enter">הוסף והמשך</button>
-          <button id="btn-continue" title="Shift+Enter">המשך</button>
-          <button id="btn-strip-manual" title="Ctrl+Shift+Delete">הסר ניקוד</button>
+    <!-- חלון "ניקוד ידני" הגדול -->
+    <div id="manual-view" class="manual-win" hidden>
+      <div class="mw-top">
+        <button id="mv-verse" title="ניקוד פסוקים">פסוקים</button>
+        <div id="mv-original" class="mw-original" title="המילה כפי שהיא במסמך"></div>
+        <div class="mw-arrows">
+          <button id="mv-prev" class="aw-arrow" title="המילה הקודמת (Ctrl+→)">➡</button>
+          <button id="mv-next" class="aw-arrow" title="הוסף למילון ועבור למילה הבאה (Ctrl+←)">⬅</button>
         </div>
+      </div>
+      <div class="mw-mid">
+        <div class="mw-col">
+          <button id="mv-strip" title="Ctrl+Shift+Delete">הסר ניקוד</button>
+          <button id="mv-undo-mark" title="ביטול הסימן האחרון (Ctrl+Z)">בטל</button>
+        </div>
+        <div class="mw-field">
+          <input id="mv-input" class="mw-input" dir="rtl" autocomplete="off" spellcheck="false" aria-label="המילה המנוקדת">
+          <button id="mv-drop" class="mw-drop" title="אפשרויות מהמילון" aria-expanded="false">▾</button>
+          <ul id="mv-list" class="options mw-list" role="listbox" hidden></ul>
+        </div>
+        <div class="mw-col">
+          <button id="mv-add" title="הוספה למילון בלבד">הוסף למילון</button>
+          <button id="mv-add-continue" class="primary" title="Enter">הוסף והמשך</button>
+        </div>
+      </div>
+      <div id="mv-marks" class="marks mw-marks"></div>
+      <div class="mw-foot">
+        <button id="mv-continue" title="Shift+Enter">המשך</button>
+        <button id="mv-close" title="Esc">סגור</button>
       </div>
     </div>
 
@@ -102,27 +142,31 @@
     <h2>טעמי המקרא</h2>
     <p class="hint">צריך גופן שתומך בטעמים, למשל SBL Hebrew, Ezra SIL או Taamey Frank CLM.</p>
     <div id="kb-taamim" class="marks big"></div>
-    <h2>הסרה</h2>
+    <h2>הסרה ותיקון</h2>
     <div class="row">
       <button id="btn-strip-selection">הסר ניקוד מהבחירה</button>
       <button id="btn-strip-taamim">הסר טעמים בלבד</button>
+      <button id="btn-fix-order-kb">תיקון סדר הניקוד</button>
     </div>
   </section>
 
   <!-- ===== מילון ===== -->
   <section id="tab-dictionary" class="tab" role="tabpanel" hidden>
     <div class="stack">
-      <input id="dict-search" class="manual-input" placeholder="חיפוש או מילה להוספה" dir="rtl" autocomplete="off">
+      <div class="dict-top">
+        <label for="dict-search" class="label">חפש את:</label>
+        <input id="dict-search" class="dict-search" dir="rtl" autocomplete="off">
+        <button id="dict-add">הוסף למילון</button>
+      </div>
       <input id="dict-key" placeholder="מפתח מיוחד (רשות), למשל עכשיו או ר&quot;ת" dir="rtl" autocomplete="off">
-      <button id="dict-add">הוסף למילון</button>
       <div class="dict-cols">
         <ul id="dict-keys" class="options small" role="listbox" tabindex="0" aria-label="מילים"></ul>
         <ul id="dict-values" class="options" role="listbox" tabindex="0" aria-label="צורות"></ul>
-      </div>
-      <div class="row">
-        <button id="dict-up">↑</button>
-        <button id="dict-down">↓</button>
-        <button id="dict-delete">✕</button>
+        <div class="aw-side">
+          <button id="dict-up" class="aw-btn blue" title="הזז למעלה">↑</button>
+          <button id="dict-down" class="aw-btn blue" title="הזז למטה">↓</button>
+          <button id="dict-delete" class="aw-btn red" title="מחק">✕</button>
+        </div>
       </div>
       <p id="dict-size" class="hint"></p>
       <h2>גיבוי</h2>
@@ -137,59 +181,79 @@
   <!-- ===== הגדרות ===== -->
   <section id="tab-settings" class="tab" role="tabpanel" hidden>
     <form id="settings-form" class="settings">
-      <div class="row">
+      <div class="presets">
         <button type="button" data-preset="default">ברירת מחדל</button>
         <button type="button" data-preset="run">הרצת ניקוד</button>
+        <button type="button" data-preset="custom">התאמה אישית</button>
       </div>
-
-      <fieldset>
-        <legend>כשיש כמה אפשרויות</legend>
-        <label><input type="radio" name="whenMultiple" value="ask"> שאל אותי</label>
-        <label><input type="radio" name="whenMultiple" value="first"> בחר את הראשונה</label>
-      </fieldset>
-      <fieldset>
-        <legend>כשאין אפשרויות</legend>
-        <label><input type="radio" name="whenNone" value="manual"> עבור לניקוד ידני</label>
-        <label><input type="radio" name="whenNone" value="next"> המשך למילה הבאה</label>
-      </fieldset>
-      <fieldset>
-        <legend>בחירה</legend>
-        <label><input type="checkbox" name="askSingle"> שאל גם כשיש אפשרות אחת</label>
-        <label><input type="checkbox" name="singleClick"> בחירה בלחיצה אחת (אחרת בלחיצה כפולה)</label>
-      </fieldset>
-      <fieldset>
-        <legend>אותיות השימוש</legend>
-        <label><input type="checkbox" name="addPrefixes"> הוסף אותיות שימוש (ו ה ש ב כ ל מ)</label>
-        <label><input type="checkbox" name="prefixAlways"> הוסף תמיד, גם כשהמילה במילון</label>
-      </fieldset>
-      <fieldset>
-        <legend>בהרצה אוטומטית</legend>
-        <label>פתיחת ראשי תיבות
-          <select name="abbreviationMode">
-            <option value="ask">שאל אותי</option><option value="apply">פתח</option><option value="skip">אל תפתח</option>
-          </select>
-        </label>
-        <label>כתיב מלא לחסר
-          <select name="spellingMode">
-            <option value="ask">שאל אותי</option><option value="apply">שנה</option><option value="skip">אל תשנה</option>
-          </select>
-        </label>
-      </fieldset>
-      <fieldset>
-        <legend>דילוג</legend>
-        <label><input type="checkbox" name="skipVocalized"> על מילים מנוקדות</label>
-        <label><input type="checkbox" name="skipSingleLetters"> על אותיות בודדות</label>
-        <label><input type="checkbox" name="skipAbbreviations"> על ראשי תיבות</label>
-        <label><input type="checkbox" name="skipRound"> על הטקסט שבתוך ( )</label>
-        <label><input type="checkbox" name="skipSquare"> על הטקסט שבתוך [ ]</label>
-        <label><input type="checkbox" name="skipCurly"> על הטקסט שבתוך { }</label>
-      </fieldset>
-      <fieldset>
-        <legend>שונות</legend>
-        <label><input type="checkbox" name="autosave"> שמירה אוטומטית כל
-          <input type="number" name="autosaveEvery" min="100" step="100" class="num"> מילים</label>
-        <label><input type="checkbox" name="preserveFormatting"> שמור עיצוב של חלקי מילה</label>
-      </fieldset>
+      <div class="settings-cols">
+        <div class="settings-col">
+          <fieldset>
+            <legend>כשיש שתי אופציות</legend>
+            <label><input type="radio" name="whenMultiple" value="first"> בחר את האופציה הראשונה</label>
+            <label><input type="radio" name="whenMultiple" value="ask"> שאל אותי</label>
+          </fieldset>
+          <fieldset>
+            <legend>אותיות חיבור</legend>
+            <label><input type="checkbox" name="addPrefixes"> הוסף אותיות חיבור</label>
+            <label><input type="checkbox" name="prefixAlways"> הוסף תמיד</label>
+          </fieldset>
+          <fieldset>
+            <legend>פתיחת ראשי תבות בהרצה</legend>
+            <div class="inline">
+              <label><input type="radio" name="abbreviationMode" value="apply"> פתח</label>
+              <label><input type="radio" name="abbreviationMode" value="ask"> שאל אותי</label>
+              <label><input type="radio" name="abbreviationMode" value="skip"> אל תפתח</label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>שנה כתיב מלא לחסר בהרצה</legend>
+            <div class="inline">
+              <label><input type="radio" name="spellingMode" value="apply"> שנה</label>
+              <label><input type="radio" name="spellingMode" value="ask"> שאל אותי</label>
+              <label><input type="radio" name="spellingMode" value="skip"> אל תשנה</label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <label><input type="checkbox" name="autosave"> שמור אוטומטית כל
+              <input type="number" name="autosaveEvery" min="100" step="100" class="num"> מילים</label>
+          </fieldset>
+        </div>
+        <div class="settings-col">
+          <fieldset>
+            <legend>כשאין אופציות</legend>
+            <label><input type="radio" name="whenNone" value="next"> דלג והמשך למילה הבאה</label>
+            <label><input type="radio" name="whenNone" value="manual"> עבור לחלון ניקוד ידני קטן</label>
+            <label><input type="radio" name="whenNone" value="bigManual"> פתח חלון ניקוד ידני גדול</label>
+          </fieldset>
+          <fieldset>
+            <legend>ניקוד אוטומטי</legend>
+            <label><input type="checkbox" name="askSingle"> שאל גם באופציה בודדת</label>
+            <label><input type="checkbox" name="singleClick"> בחירה בלחיצה בודדת</label>
+          </fieldset>
+          <fieldset>
+            <legend>דלג על</legend>
+            <label><input type="checkbox" name="skipVocalized"> מילים מנוקדות</label>
+            <label><input type="checkbox" name="skipSingleLetters"> אותיות בודדות</label>
+            <label><input type="checkbox" name="skipAbbreviations"> ראשי תבות</label>
+            <div class="inline">
+              <label><input type="checkbox" name="skipRound"> ( )</label>
+              <label><input type="checkbox" name="skipSquare"> [ ]</label>
+              <label><input type="checkbox" name="skipCurly"> { }</label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <label><input type="checkbox" name="preserveFormatting"> שמור עיצוב של חלקי מילה</label>
+          </fieldset>
+          <div class="row">
+            <button type="button" id="settings-dict" class="aw-purple-text">מילון</button>
+            <button type="button" id="settings-help" class="aw-red-text">הוראות</button>
+          </div>
+        </div>
+      </div>
+      <div class="settings-foot">
+        <button type="button" id="settings-continue">המשך</button>
+      </div>
     </form>
   </section>
 

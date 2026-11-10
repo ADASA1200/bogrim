@@ -3,7 +3,7 @@
 // כל שאר הלוגיקה נמצאת ב-core ואינה תלויה ב-Office.
 
 import { tokenize, extractCore, updateBrackets, newBracketState } from './core/analyzer.js';
-import { stripMarks, hasNikud, clusters, isLetter, makeKey } from './core/hebrew.js';
+import { stripMarks, hasNikud, clusters, isLetter, makeKey, normalizeMarks } from './core/hebrew.js';
 
 const WORD_DELIMITERS = [' ', '\t', ' ', '\u000B'];
 
@@ -314,6 +314,26 @@ export async function stripSelection({ taamimOnly = false } = {}) {
       const stripped = taamimOnly ? [...t].filter((c) => c < '֑' || c > '֯').join('') : stripMarks(t);
       if (stripped !== t) {
         tr.insertText(stripped, 'Replace');
+        changed++;
+      }
+    }
+    await ctx.sync();
+    return changed;
+  });
+}
+
+/** "תיקון סדר הניקוד": מסדר את סימני הניקוד בכל מילה שבבחירה. */
+export async function fixOrderSelection() {
+  return Word.run(async (ctx) => {
+    const sel = ctx.document.getSelection();
+    const trs = sel.getTextRanges(WORD_DELIMITERS, true);
+    trs.load('items/text');
+    await ctx.sync();
+    let changed = 0;
+    for (const tr of trs.items) {
+      const fixed = normalizeMarks(tr.text);
+      if (fixed !== tr.text) {
+        tr.insertText(fixed, 'Replace');
         changed++;
       }
     }

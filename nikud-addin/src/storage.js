@@ -6,6 +6,7 @@ import { sanitizeSettings } from './core/settings.js';
 const DB_NAME = 'nikud-kal';
 const STORE = 'dictionary';
 const SETTINGS_KEY = 'nikud-kal.settings';
+const CUSTOM_KEY = 'nikud-kal.custom';
 
 function openDb() {
   return new Promise((resolve, reject) => {
@@ -84,5 +85,23 @@ export function saveSettings(settings) {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   } catch {
     /* אחסון חסום: ההגדרות יישמרו רק עד סגירת החלונית */
+  }
+}
+
+/** ההגדרות של "התאמה אישית", שנשמרות בנפרד מהקבוצות המוכנות. */
+export function loadCustomSettings() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CUSTOM_KEY) || 'null');
+    return raw ? sanitizeSettings(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveCustomSettings(settings) {
+  try {
+    localStorage.setItem(CUSTOM_KEY, JSON.stringify(settings));
+  } catch {
+    /* אחסון חסום */
   }
 }

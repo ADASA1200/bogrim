@@ -21,6 +21,16 @@
       "name": "ניקוד פסוקים"
     },
     {
+      "id": "openSettings",
+      "type": "ExecuteFunction",
+      "name": "הגדרות"
+    },
+    {
+      "id": "openDictionary",
+      "type": "ExecuteFunction",
+      "name": "מילון"
+    },
+    {
       "id": "removeNikud",
       "type": "ExecuteFunction",
       "name": "מחק ניקוד"
@@ -29,16 +39,6 @@
       "id": "addToDictionary",
       "type": "ExecuteFunction",
       "name": "הוסף מילים למילון"
-    },
-    {
-      "id": "openDictionary",
-      "type": "ExecuteFunction",
-      "name": "מילון"
-    },
-    {
-      "id": "openSettings",
-      "type": "ExecuteFunction",
-      "name": "הגדרות"
     }
   ],
   "shortcuts": [
@@ -67,15 +67,9 @@
       }
     },
     {
-      "action": "removeNikud",
+      "action": "openSettings",
       "key": {
-        "default": "Ctrl+Shift+Delete"
-      }
-    },
-    {
-      "action": "addToDictionary",
-      "key": {
-        "default": "Ctrl+Shift+Insert"
+        "default": "Ctrl+Shift+S"
       }
     },
     {
@@ -85,9 +79,15 @@
       }
     },
     {
-      "action": "openSettings",
+      "action": "removeNikud",
       "key": {
-        "default": "Ctrl+Shift+S"
+        "default": "Ctrl+Shift+Delete"
+      }
+    },
+    {
+      "action": "addToDictionary",
+      "key": {
+        "default": "Ctrl+Shift+Insert"
       }
     }
   ]
