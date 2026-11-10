@@ -24,3 +24,7 @@ Pages in the nav (`Layout.js`): `Alumni` (בוגרים), `AddAlumni` (הוסף �
 - UI text is Hebrew; the root layout sets `dir="rtl"`. Keep new UI RTL and in Hebrew.
 - Theme colors are CSS variables defined in `Layout.js` (`--primary`, `--primary-dark`, `--accent`, `--success`, `--warning`).
 - After mutations, invalidate the matching react-query key (e.g. `['alumni']`).
+
+## Token usage
+
+Follow the rules in @TOKEN_SAVING.md.
