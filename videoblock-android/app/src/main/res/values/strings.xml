@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">חוסם וידאו</string>
+    <string name="a11y_desc">סוגר הפעלת וידאו באפליקציות שנשארו פתוחות (למשל מסרונים ודפדפן). קורא רק את תוכן המסך, לא שומר ולא שולח כלום.</string>
 </resources>

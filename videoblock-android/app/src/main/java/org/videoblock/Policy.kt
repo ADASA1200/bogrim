@@ -24,7 +24,7 @@ object Policy {
     private val worker = Executors.newSingleThreadExecutor()
 
     fun admin(c: Context) = ComponentName(c, AdminReceiver::class.java)
-    fun dpm(c: Context) = c.getSystemService(DevicePolicyManager::class.java)!!
+    fun dpm(c: Context) = c.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
     fun isDeviceOwner(c: Context) = dpm(c).isDeviceOwnerApp(c.packageName)
 
     /** User restrictions that keep the protection in place and close known bypasses. */
@@ -63,10 +63,14 @@ object Policy {
         if (Build.VERSION.SDK_INT >= 29) dpm.setGlobalPrivateDnsModeOpportunistic(admin)
         dpm.setCameraDisabled(admin, prefs.blockCamera)
 
-        // Always-on VPN = the DNS filter is started by the system at boot and cannot be turned off.
-        if (dpm.getAlwaysOnVpnPackage(admin) != c.packageName) {
+        // Always-on VPN = the DNS filter is started by the system at boot and cannot be turned off (API 26+).
+        if (Build.VERSION.SDK_INT >= 26 && dpm.getAlwaysOnVpnPackage(admin) != c.packageName) {
             runCatching { dpm.setAlwaysOnVpnPackage(admin, c.packageName, false) }
                 .onFailure { Log.e(TAG, "always-on VPN", it) }
+        }
+        if (Build.VERSION.SDK_INT < 26) {
+            // Below API 26 there is no always-on lock; start the filter ourselves and rely on the job + boot receiver.
+            runCatching { c.startService(Intent(c, DnsVpnService::class.java)) }
         }
 
         // Chrome: turn off its built-in DNS-over-HTTPS so it must use our filter.
@@ -91,29 +95,52 @@ object Policy {
         val admin = admin(c)
         val targets = computeTargets(c, prefs)
 
-        val release = prefs.suspendedByUs - targets
-        if (release.isNotEmpty()) dpm.setPackagesSuspended(admin, release.toTypedArray(), false)
-        val failed = dpm.setPackagesSuspended(admin, targets.toTypedArray(), true).toSet()
-        prefs.suspendedByUs = targets - failed
-        if (failed.isNotEmpty()) Log.w(TAG, "could not suspend: $failed")
-
-        // Known video apps are also hidden from the launcher entirely.
-        val hideTargets = targets intersect (Blocklist.videoPackages + prefs.forceBlocked)
-        (prefs.hiddenByUs - hideTargets).forEach { dpm.setApplicationHidden(admin, it, false) }
-        prefs.hiddenByUs = hideTargets.filter { dpm.setApplicationHidden(admin, it, true) }.toSet()
+        if (Build.VERSION.SDK_INT >= 24) {
+            // Suspension (API 24+) keeps the app visible but un-openable with a "blocked" dialog.
+            val release = prefs.suspendedByUs - targets
+            if (release.isNotEmpty()) dpm.setPackagesSuspended(admin, release.toTypedArray(), false)
+            val failed = dpm.setPackagesSuspended(admin, targets.toTypedArray(), true).toSet()
+            prefs.suspendedByUs = targets - failed
+            if (failed.isNotEmpty()) Log.w(TAG, "could not suspend: $failed")
+            // Known video apps are also hidden from the launcher entirely.
+            val hideTargets = targets intersect (Blocklist.videoPackages + prefs.forceBlocked)
+            (prefs.hiddenByUs - hideTargets).forEach { dpm.setApplicationHidden(admin, it, false) }
+            prefs.hiddenByUs = hideTargets.filter { dpm.setApplicationHidden(admin, it, true) }.toSet()
+        } else {
+            // Android 5/6: no suspension API — hide every target instead (setApplicationHidden is API 21).
+            (prefs.hiddenByUs - targets).forEach { dpm.setApplicationHidden(admin, it, false) }
+            prefs.hiddenByUs = targets.filter { dpm.setApplicationHidden(admin, it, true) }.toSet()
+        }
     }
 
     /** Every installed app that can open a video file, plus every web browser. */
     fun detectVideoApps(c: Context): Set<String> {
         val pm = c.packageManager
         val flags = PackageManager.MATCH_ALL or PackageManager.MATCH_DISABLED_COMPONENTS
+        fun view(uri: String, type: String) =
+            Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(uri), type)
         val probes = listOf(
-            Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse("content://x/v.mp4"), "video/mp4"),
-            Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse("content://x/v"), "video/*"),
-            Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse("file:///sdcard/v.mkv"), "video/x-matroska"),
-            Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse("https://x/v.m3u8"), "application/x-mpegURL"),
-            Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse("https://x/v.mp4"), "video/mp4"),
+            // Local and streamed video of every common container / MIME type.
+            view("content://x/v.mp4", "video/mp4"),
+            view("content://x/v", "video/*"),
+            view("file:///sdcard/v.mkv", "video/x-matroska"),
+            view("file:///sdcard/v.webm", "video/webm"),
+            view("file:///sdcard/v.avi", "video/avi"),
+            view("file:///sdcard/v.mov", "video/quicktime"),
+            view("file:///sdcard/v.3gp", "video/3gpp"),
+            view("file:///sdcard/v.ts", "video/mp2t"),
+            view("https://x/v.m3u8", "application/x-mpegURL"),      // HLS
+            view("https://x/v.m3u8", "application/vnd.apple.mpegurl"),
+            view("https://x/v.mpd", "application/dash+xml"),        // DASH
+            view("https://x/v.mp4", "video/mp4"),
             Intent("com.android.camera.action.REVIEW").setDataAndType(Uri.parse("content://x/v"), "video/*"),
+            // Deep links some video apps register even when their MIME handlers are hidden.
+            Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:x")),
+            Intent(Intent.ACTION_VIEW, Uri.parse("youtube://x")),
+            Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube.launch:x")),
+            // Any app that can capture video (camera apps, camcorders).
+            Intent("android.media.action.VIDEO_CAPTURE"),
+            Intent("android.media.action.VIDEO_CAMERA"),
             // Web browsers can play any video on the web.
             Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com"))
                 .addCategory(Intent.CATEGORY_BROWSABLE),
@@ -139,7 +166,7 @@ object Policy {
         resolve(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME))
         resolve(Intent(Settings.ACTION_SETTINGS))
         resolve(Intent(Intent.ACTION_DIAL))
-        c.getSystemService(TelecomManager::class.java)?.defaultDialerPackage?.let { out += it }
+        (c.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager)?.defaultDialerPackage?.let { out += it }
         Telephony.Sms.getDefaultSmsPackage(c)?.let { out += it }
         pm.queryIntentServices(Intent("android.view.InputMethod"), 0)
             .forEach { out += it.serviceInfo.packageName }
@@ -157,7 +184,7 @@ object Policy {
         prefs.suspendedByUs = emptySet(); prefs.hiddenByUs = emptySet()
         restrictions.forEach { dpm.clearUserRestriction(admin, it) }
         dpm.setCameraDisabled(admin, false)
-        runCatching { dpm.setAlwaysOnVpnPackage(admin, null, false) }
+        if (Build.VERSION.SDK_INT >= 26) runCatching { dpm.setAlwaysOnVpnPackage(admin, null, false) }
         dpm.setUninstallBlocked(admin, c.packageName, false)
         c.stopService(Intent(c, DnsVpnService::class.java))
         @Suppress("DEPRECATION") dpm.clearDeviceOwnerApp(c.packageName)

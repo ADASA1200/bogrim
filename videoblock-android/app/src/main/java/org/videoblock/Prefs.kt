@@ -10,7 +10,9 @@ import javax.crypto.spec.PBEKeySpec
 /** All persistent settings. Stored in device-protected storage so they are readable before first unlock. */
 class Prefs(context: Context) {
     private val sp: SharedPreferences =
-        context.createDeviceProtectedStorageContext().getSharedPreferences("vb", Context.MODE_PRIVATE)
+        // Device-protected storage (readable before first unlock) exists from API 24.
+        (if (android.os.Build.VERSION.SDK_INT >= 24) context.createDeviceProtectedStorageContext() else context)
+            .getSharedPreferences("vb", Context.MODE_PRIVATE)
 
     /** Packages the administrator explicitly allowed even though they can play video. */
     var allowed: Set<String>

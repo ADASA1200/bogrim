@@ -53,6 +53,10 @@ object Blocklist {
         "doh.opendns.com", "dns.adguard.com", "dns.adguard-dns.com", "dns.nextdns.io",
         "doh.cleanbrowsing.org", "doh.mullvad.net", "dns.controld.com", "doh.dns.sb",
         "use-application-dns.net",
+        // Generic video CDNs / streaming infrastructure used by many apps and sites.
+        "akamaihd.net", "akamaized.net", "llnwd.net", "lldns.net", "level3.net",
+        "fastly.net", "fastlylb.net", "edgecastcdn.net", "cdn77.org", "b-cdn.net",
+        "cloudfront.net", "video.google.com", "vod.akamai.com", "hls.ttvnw.net",
     )
 
     fun isBlockedDomain(name: String, extra: Set<String>): Boolean {

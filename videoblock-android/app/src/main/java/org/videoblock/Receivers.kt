@@ -39,7 +39,7 @@ class EnforceJob : JobService() {
 
     companion object {
         fun schedule(c: Context) {
-            val js = c.getSystemService(JobScheduler::class.java) ?: return
+            val js = c.getSystemService(Context.JOB_SCHEDULER_SERVICE) as? JobScheduler ?: return
             if (js.getPendingJob(1) != null) return
             js.schedule(
                 JobInfo.Builder(1, ComponentName(c, EnforceJob::class.java))

@@ -3,8 +3,11 @@ package org.videoblock
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.provider.Settings
+import android.text.TextUtils
 import android.widget.ScrollView
 
 class MainActivity : Activity() {
@@ -34,6 +37,12 @@ class MainActivity : Activity() {
                 "להפעיל ADB, להחליף VPN או להעביר קבצים ב-USB / כרטיס זיכרון"
             ))
             if (prefs.blockCamera) col.addView(text("• המצלמה חסומה"))
+            if (!a11yEnabled()) {
+                col.addView(text("לשכבת הגנה נוספת (סגירת וידאו גם בתוך אפליקציות פתוחות) יש להפעיל את שירות הנגישות:"))
+                col.addView(button("הפעלת שכבת חסימת וידאו") {
+                    runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+                })
+            }
             if (prefs.permanent) {
                 col.addView(text("🔒 המכשיר נעול לצמיתות. לא ניתן לשנות הגדרות או להסיר את ההגנה.", bold = true))
             } else {
@@ -43,6 +52,16 @@ class MainActivity : Activity() {
             }
         }
         setContentView(ScrollView(this).apply { addView(col) })
+    }
+
+    private fun a11yEnabled(): Boolean {
+        val flat = Settings.Secure.getString(contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false
+        val me = "$packageName/${MediaBlockService::class.java.name}"
+        val split = TextUtils.SimpleStringSplitter(':')
+        split.setString(flat)
+        while (split.hasNext()) if (split.next().equals(me, true)) return true
+        return false
     }
 
     private fun renderSetup(col: android.widget.LinearLayout) {
@@ -58,7 +77,7 @@ class MainActivity : Activity() {
         ))
         col.addView(text(cmd, 14f, bold = true))
         col.addView(button("העתק פקודה") {
-            getSystemService(ClipboardManager::class.java)
+            (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
                 .setPrimaryClip(ClipData.newPlainText("cmd", cmd))
             toast("הועתק")
         })
