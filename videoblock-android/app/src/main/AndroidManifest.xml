@@ -25,6 +25,7 @@
         </activity>
 
         <activity android:name=".AdminActivity" android:exported="false" />
+        <activity android:name=".ProvisioningActivity" android:exported="false" />
 
         <receiver
             android:name=".AdminReceiver"

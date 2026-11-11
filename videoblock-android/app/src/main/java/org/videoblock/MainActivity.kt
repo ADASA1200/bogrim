@@ -76,6 +76,10 @@ class MainActivity : Activity() {
             "3. חבר את המכשיר למחשב והרץ:"
         ))
         col.addView(text(cmd, 14f, bold = true))
+        col.addView(button("⚡ הפעלה אוטומטית (ללא מחשב)") {
+            startActivity(Intent(this, ProvisioningActivity::class.java))
+        })
+        col.addView(text("או, הפעלה ידנית ממחשב:", 14f, bold = true))
         col.addView(button("העתק פקודה") {
             (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
                 .setPrimaryClip(ClipData.newPlainText("cmd", cmd))
