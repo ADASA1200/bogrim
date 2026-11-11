@@ -46,7 +46,8 @@ class MainActivity : Activity() {
             if (prefs.permanent) {
                 col.addView(text("🔒 המכשיר נעול לצמיתות. לא ניתן לשנות הגדרות או להסיר את ההגנה.", bold = true))
             } else {
-                col.addView(button("ניהול (דורש קוד מנהל)") {
+                col.addView(text("להסרת ההגנה או לשינוי הגדרות — הזן את סיסמת ההסרה שהגדרת:"))
+                col.addView(button("ניהול והסרה (דורש סיסמה)") {
                     askPin { startActivity(Intent(this, AdminActivity::class.java)) }
                 })
             }
@@ -65,29 +66,48 @@ class MainActivity : Activity() {
     }
 
     private fun renderSetup(col: android.widget.LinearLayout) {
+        val prefs = Prefs(this)
+        col.addView(text("התקנה", 20f, bold = true))
+
+        // Step 1 — define the removal password BEFORE protection is enabled.
+        // This same password is later required to open settings or remove the protection.
+        if (!prefs.hasPin) {
+            col.addView(text("שלב 1 מתוך 2: הגדרת סיסמת הסרה", 18f, bold = true))
+            col.addView(text(
+                "לפני הפעלת ההגנה יש להגדיר סיסמה. רק באמצעותה יהיה ניתן בעתיד להסיר את ההגנה " +
+                "או לשנות הגדרות. מומלץ למסור אותה לאדם אחר (רב / הורה / חבר) ולא לשמור אותה אצלך.\n\n" +
+                "בלי סיסמה זו לא ניתן להמשיך."
+            ))
+            col.addView(button("הגדר סיסמת הסרה") { newPin(cancelable = false) { render() } })
+            return
+        }
+
+        col.addView(text("✅ שלב 1: סיסמת ההסרה הוגדרה", 16f, bold = true))
+        col.addView(button("שינוי סיסמת ההסרה") { askPin { newPin(cancelable = true) {} } })
+
+        // Step 2 — activate protection (Device Owner).
         val cmd = "adb shell dpm set-device-owner $packageName/.AdminReceiver"
-        col.addView(text("ההגנה עדיין לא הופעלה", 20f, bold = true))
+        col.addView(text("שלב 2 מתוך 2: הפעלת ההגנה", 18f, bold = true))
         col.addView(text(
             "כדי שלא יהיה ניתן להסיר את החסימה בשום צורה, התוכנה חייבת לפעול כ\"בעלים של המכשיר\" " +
-            "(Device Owner). זו פעולה חד-פעמית שנעשית מהמחשב:\n\n" +
-            "1. מחק את כל החשבונות מהמכשיר (הגדרות ← חשבונות), כולל חשבון Google. " +
-            "אפשר להוסיף אותם שוב אחרי ההפעלה.\n" +
-            "2. הפעל אפשרויות מפתחים ו\"ניפוי באגים ב-USB\".\n" +
-            "3. חבר את המכשיר למחשב והרץ:"
+            "(Device Owner). הדרך הקלה היא אוטומטית, ללא מחשב:"
         ))
-        col.addView(text(cmd, 14f, bold = true))
         col.addView(button("⚡ הפעלה אוטומטית (ללא מחשב)") {
             startActivity(Intent(this, ProvisioningActivity::class.java))
         })
-        col.addView(text("או, הפעלה ידנית ממחשב:", 14f, bold = true))
+        col.addView(text(
+            "או הפעלה ידנית ממחשב: מחק את כל החשבונות (הגדרות ← חשבונות), הפעל 'ניפוי באגים ב-USB', " +
+            "חבר למחשב והרץ:"
+        ))
+        col.addView(text(cmd, 14f, bold = true))
         col.addView(button("העתק פקודה") {
             (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
                 .setPrimaryClip(ClipData.newPlainText("cmd", cmd))
             toast("הועתק")
         })
         col.addView(text(
-            "4. פתח שוב את התוכנה והגדר קוד מנהל.\n\n" +
-            "לאחר ההפעלה ניפוי הבאגים ייחסם אוטומטית, כך שגם דרך המחשב לא ניתן יהיה להסיר את התוכנה."
+            "לאחר ההפעלה ניפוי הבאגים ייחסם אוטומטית, כך שגם דרך המחשב לא ניתן יהיה להסיר את התוכנה. " +
+            "ההסרה תתאפשר אך ורק באמצעות סיסמת ההסרה שהגדרת, ממסך הניהול."
         ))
     }
 }
