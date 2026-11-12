@@ -35,6 +35,7 @@ class ProvisioningActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requestNetworkPermissions()
         val col = column()
         col.addView(header("הפעלה אוטומטית", "ללא מחשב — האפליקציה מפעילה את עצמה"))
 
@@ -108,6 +109,21 @@ class ProvisioningActivity : AppCompatActivity() {
             addView(edit)
         }
         return layout to edit
+    }
+
+    /** mDNS discovery of the local adbd needs these at runtime (NEARBY_WIFI_DEVICES on API 33+). */
+    private fun requestNetworkPermissions() {
+        val needed = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (checkSelfPermission(android.Manifest.permission.NEARBY_WIFI_DEVICES) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED)
+                needed += android.Manifest.permission.NEARBY_WIFI_DEVICES
+        } else {
+            if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED)
+                needed += android.Manifest.permission.ACCESS_FINE_LOCATION
+        }
+        if (needed.isNotEmpty()) runCatching { requestPermissions(needed.toTypedArray(), 7) }
     }
 
     private fun openDev() {
