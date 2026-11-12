@@ -40,37 +40,39 @@ class ProvisioningActivity : AppCompatActivity() {
         col.addView(header("הפעלה אוטומטית", "ללא מחשב — האפליקציה מפעילה את עצמה"))
 
         col.addView(card {
-            val wireless = Build.VERSION.SDK_INT >= 30
-            addView(text("שלבים", 18f, bold = true))
+            addView(text("שלבים (אנדרואיד 11+)", 18f, bold = true))
             addView(text(
                 "1. פתח 'אפשרויות מפתחים' (7 הקשות על 'מספר גרסה' בהגדרות ← אודות).\n" +
-                (if (wireless)
-                    "2. הפעל 'ניפוי באגים אלחוטי'.\n" +
-                    "3. היכנס ל'התאמה באמצעות קוד' (Pair device with pairing code) — יוצג קוד בן 6 ספרות.\n" +
-                    "4. הקלד כאן את הקוד והקש 'צמד והפעל'."
-                 else
-                    "2. הפעל 'ניפוי באגים ב-USB'.\n" +
-                    "3. הקש 'חבר והפעל' ואשר את חלון ניפוי הבאגים.")
+                "2. הפעל 'ניפוי באגים אלחוטי' (Wireless debugging).\n" +
+                "3. היכנס ל'התאמה באמצעות קוד' — יוצג קוד בן 6 ספרות וכתובת IP:פורט. השאר מסך זה פתוח.\n" +
+                "4. הקלד למטה את הקוד והקש 'צמד והפעל'. אם הגילוי האוטומטי נכשל — הקלד גם את הכתובת."
             ))
-            addView(outlinedButton("פתח אפשרויות מפתחים") { openDev() })
+            addView(outlinedButton("פתח ניפוי באגים אלחוטי") { openWirelessDebug() })
         })
 
         if (Build.VERSION.SDK_INT >= 30) {
             col.addView(card {
                 addView(text("צימוד אלחוטי", 18f, bold = true))
-                val (layout, edit) = codeField()
-                addView(layout)
+                val (l1, code) = textField("קוד צימוד (6 ספרות)", numeric = true)
+                val (l2, addr) = textField("כתובת צימוד — אופציונלי (IP:port)", numeric = false)
+                addView(l1); addView(l2)
                 addView(button("צמד והפעל") {
-                    val code = edit.text.toString().trim()
-                    if (code.length < 6) { toast("הקלד את קוד הצימוד בן 6 הספרות"); return@button }
-                    runFlow(pairCode = code)
+                    val c = code.text.toString().trim()
+                    if (c.length < 6) { toast("הקלד את קוד הצימוד בן 6 הספרות"); return@button }
+                    runFlow(pairCode = c, pairAddr = addr.text.toString(), connectAddr = null)
                 })
             })
         }
 
         col.addView(card {
-            addView(text("כבר מצומד? (או ניפוי USB)", 16f, bold = true))
-            addView(outlinedButton("חבר והפעל") { runFlow(pairCode = null) })
+            addView(text("חיבור ידני / כבר מצומד", 16f, bold = true))
+            addView(text("אם כבר ביצעת צימוד, או שהגילוי האוטומטי נכשל — הקלד את הכתובת (IP:port) " +
+                "שמופיעה במסך 'ניפוי באגים אלחוטי' והקש חבר.", 13f))
+            val (l, connAddr) = textField("כתובת חיבור (IP:port)", numeric = false)
+            addView(l)
+            addView(outlinedButton("חבר והפעל") {
+                runFlow(pairCode = null, pairAddr = null, connectAddr = connAddr.text.toString())
+            })
         })
 
         // Extended diagnostics log.
@@ -97,18 +99,22 @@ class ProvisioningActivity : AppCompatActivity() {
         log("מוכן. אנדרואיד API ${Build.VERSION.SDK_INT}.")
     }
 
-    private fun codeField(): Pair<TextInputLayout, TextInputEditText> {
+    private fun textField(hintText: String, numeric: Boolean): Pair<TextInputLayout, TextInputEditText> {
         val edit = TextInputEditText(this).apply {
-            inputType = InputType.TYPE_CLASS_NUMBER
+            inputType = if (numeric) InputType.TYPE_CLASS_NUMBER
+                        else InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             textDirection = View.TEXT_DIRECTION_LTR
             gravity = Gravity.CENTER
-            textSize = 22f
+            textSize = if (numeric) 22f else 16f
         }
-        val layout = TextInputLayout(this).apply {
-            hint = "קוד צימוד (6 ספרות)"
-            addView(edit)
-        }
+        val layout = TextInputLayout(this).apply { hint = hintText; addView(edit) }
         return layout to edit
+    }
+
+    private fun openWirelessDebug() {
+        // No public intent targets the wireless-debugging page directly; open developer options.
+        runCatching { startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)) }
+            .onFailure { openDev() }
     }
 
     /** mDNS discovery of the local adbd needs these at runtime (NEARBY_WIFI_DEVICES on API 33+). */
@@ -131,19 +137,19 @@ class ProvisioningActivity : AppCompatActivity() {
             .onFailure { runCatching { startActivity(Intent(Settings.ACTION_DEVICE_INFO_SETTINGS)) } }
     }
 
-    private fun runFlow(pairCode: String?) {
+    private fun runFlow(pairCode: String?, pairAddr: String?, connectAddr: String?) {
         log("— מתחיל —")
         Thread {
             // Catch everything: a crash on this worker would kill the app before the log is seen.
             try {
                 val prov = Provisioner(this) { line -> log(line) }
                 if (pairCode != null) {
-                    if (!prov.pair(pairCode)) {
+                    if (!prov.pair(pairCode, prov.parseEndpoint(pairAddr))) {
                         ui.post { toast("הצימוד נכשל — ראה לוג") }
                         return@Thread
                     }
                 }
-                val result = prov.connectAndProvision()
+                val result = prov.connectAndProvision(prov.parseEndpoint(connectAddr))
                 ui.post {
                     if (result.ok) {
                         Policy.enforceAsync(this)

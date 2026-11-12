@@ -49,9 +49,13 @@ class Provisioner(private val context: Context, private val log: (String) -> Uni
         wifi?.createMulticastLock("videoblock-adb")?.apply { setReferenceCounted(true); acquire() }
     } catch (t: Throwable) { log("אזהרה: לא ניתן לנעול multicast (${t.message})"); null }
 
-    /** API 30+: pair with the 6-digit code shown under "Pair device with pairing code". */
-    fun pair(code: String): Boolean {
-        val ep = discover(AdbMdns.SERVICE_TYPE_TLS_PAIRING, 25) ?: return false
+    /**
+     * API 30+: pair with the 6-digit code. [manual] is the ip:port shown on the "Pair device with
+     * pairing code" screen — used directly when given, otherwise the pairing service is found via mDNS.
+     */
+    fun pair(code: String, manual: Endpoint?): Boolean {
+        val ep = manual?.also { log("משתמש בכתובת צימוד ידנית ${it.host}:${it.port}") }
+            ?: discover(AdbMdns.SERVICE_TYPE_TLS_PAIRING, 30) ?: return false
         val mgr = try { AdbManager.create(context) }
         catch (t: Throwable) { logError("יצירת זהות ADB", t); return false }
         return try {
@@ -67,33 +71,44 @@ class Provisioner(private val context: Context, private val log: (String) -> Uni
         }
     }
 
-    /** Connects and runs the provisioning script. Tries the classic local port first, then mDNS. */
-    fun connectAndProvision(): Result {
+    /**
+     * Connects and runs the provisioning script. [manual] is the ip:port from the main Wireless
+     * debugging screen — used directly when given; otherwise tries 127.0.0.1:5555 then mDNS.
+     */
+    fun connectAndProvision(manual: Endpoint?): Result {
         val mgr = try { AdbManager.create(context) }
         catch (t: Throwable) { logError("יצירת זהות ADB", t); return Result(false, "שגיאה ביצירת זהות ADB") }
         try {
-            // 1) Direct classic adbd port (how PCAPdroid-MDM connects). Works when `adb tcpip` was
-            //    enabled, on USB-over-TCP, or on rooted devices — no mDNS needed.
-            for (port in listOf(5555)) {
-                if (tryConnect(mgr, "127.0.0.1", port)) return runScript(mgr)
-            }
+            // 0) Manual address from the Wireless debugging screen (most reliable when given).
+            if (manual != null && tryConnect(mgr, manual.host, manual.port)) return runScript(mgr)
+            // 1) Direct classic adbd port (how PCAPdroid-MDM connects).
+            if (manual == null && tryConnect(mgr, "127.0.0.1", 5555)) return runScript(mgr)
             // 2) Wireless-debugging connect service via mDNS (API 30+, after pairing).
-            if (Build.VERSION.SDK_INT >= 30) {
-                val ep = discover(AdbMdns.SERVICE_TYPE_TLS_CONNECT, 20)
+            if (manual == null && Build.VERSION.SDK_INT >= 30) {
+                val ep = discover(AdbMdns.SERVICE_TYPE_TLS_CONNECT, 25)
                 if (ep != null && tryConnect(mgr, ep.host, ep.port)) return runScript(mgr)
             }
             log("לא נמצא חיבור ADB זמין.")
             return Result(false,
-                if (Build.VERSION.SDK_INT >= 30)
-                    "לא נמצא חיבור. ב-אנדרואיד 11+: בצע קודם 'צימוד באמצעות קוד' (כפתור 'צמד והפעל')."
-                else
-                    "לא נמצא חיבור. במכשיר זה יש להפעיל פעם אחת ממחשב: adb tcpip 5555, ואז לנסות שוב.")
+                "לא נמצא חיבור. ודא שניפוי הבאגים האלחוטי פעיל, ושביצעת צימוד. " +
+                "אפשר גם להקליד ידנית את הכתובת (IP:פורט) שמופיעה במסך ניפוי הבאגים האלחוטי.")
         } catch (t: Throwable) {
             logError("חיבור/הפעלה", t)
             return Result(false, "שגיאה: ${t.message ?: t.javaClass.simpleName}")
         } finally {
             runCatching { mgr.close() }
         }
+    }
+
+    /** Parses "192.168.1.5:37123" (or "...:port") into an endpoint, or null if blank/invalid. */
+    fun parseEndpoint(text: String?): Endpoint? {
+        val t = text?.trim().orEmpty()
+        if (t.isEmpty()) return null
+        val i = t.lastIndexOf(':')
+        if (i <= 0 || i == t.length - 1) return null
+        val host = t.substring(0, i).trim()
+        val port = t.substring(i + 1).trim().toIntOrNull() ?: return null
+        return if (port in 1..65535) Endpoint(host, port) else null
     }
 
     /** Attempts one ADB connection; logs the outcome. Returns true only if fully connected. */
