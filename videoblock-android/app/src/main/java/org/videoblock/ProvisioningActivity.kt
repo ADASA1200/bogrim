@@ -118,22 +118,29 @@ class ProvisioningActivity : AppCompatActivity() {
     private fun runFlow(pairCode: String?) {
         log("— מתחיל —")
         Thread {
-            val prov = Provisioner(this) { line -> log(line) }
-            if (pairCode != null) {
-                if (!prov.pair(pairCode)) {
-                    ui.post { toast("הצימוד נכשל — ראה לוג") }
-                    return@Thread
+            // Catch everything: a crash on this worker would kill the app before the log is seen.
+            try {
+                val prov = Provisioner(this) { line -> log(line) }
+                if (pairCode != null) {
+                    if (!prov.pair(pairCode)) {
+                        ui.post { toast("הצימוד נכשל — ראה לוג") }
+                        return@Thread
+                    }
                 }
-            }
-            val result = prov.connectAndProvision()
-            ui.post {
-                if (result.ok) {
-                    Policy.enforceAsync(this)
-                    toast("ההגנה הופעלה")
-                    startActivity(Intent(this, MainActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
-                    finish()
-                } else toast(result.message)
+                val result = prov.connectAndProvision()
+                ui.post {
+                    if (result.ok) {
+                        Policy.enforceAsync(this)
+                        toast("ההגנה הופעלה")
+                        startActivity(Intent(this, MainActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
+                        finish()
+                    } else toast(result.message)
+                }
+            } catch (t: Throwable) {
+                log("✖ קריסה נמנעה: ${t.javaClass.name}: ${t.message}")
+                t.stackTrace.take(6).forEach { log("   at $it") }
+                ui.post { toast("אירעה שגיאה — ראה לוג מפורט") }
             }
         }.start()
     }

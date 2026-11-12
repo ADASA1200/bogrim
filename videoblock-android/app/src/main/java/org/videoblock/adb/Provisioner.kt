@@ -39,20 +39,25 @@ class Provisioner(private val context: Context, private val log: (String) -> Uni
     /** API 30+: pair with the 6-digit code shown under "Pair device with pairing code". */
     fun pair(code: String): Boolean {
         val ep = discover(AdbMdns.SERVICE_TYPE_TLS_PAIRING, 25) ?: return false
+        val mgr = try { AdbManager.create(context) }
+        catch (t: Throwable) { logError("יצירת זהות ADB", t); return false }
         return try {
             log("מבצע צימוד (SPAKE2) מול ${ep.host}:${ep.port}…")
-            val ok = AdbManager.get(context).pair(ep.host, ep.port, code)
+            val ok = mgr.pair(ep.host, ep.port, code)
             log(if (ok) "הצימוד הצליח ✔" else "הצימוד נכשל ✖")
             ok
-        } catch (e: Exception) {
-            log("שגיאת צימוד: ${e.javaClass.simpleName}: ${e.message}")
+        } catch (t: Throwable) {
+            logError("צימוד", t)
             false
+        } finally {
+            runCatching { mgr.close() }
         }
     }
 
     /** Connects (discovering the connect port) and runs the provisioning script. */
     fun connectAndProvision(): Result {
-        val mgr = AdbManager.get(context)
+        val mgr = try { AdbManager.create(context) }
+        catch (t: Throwable) { logError("יצירת זהות ADB", t); return Result(false, "שגיאה ביצירת זהות ADB") }
         try {
             log("מתחבר ל-adbd…")
             val connected = mgr.autoConnect(context, 25_000)
@@ -68,12 +73,19 @@ class Provisioner(private val context: Context, private val log: (String) -> Uni
         } catch (e: io.github.muntashirakon.adb.AdbPairingRequiredException) {
             log("נדרש צימוד תחילה (אנדרואיד 11+).")
             return Result(false, "יש לבצע צימוד תחילה: פתח 'Pair device with pairing code', והזן את הקוד כאן.")
-        } catch (e: Exception) {
-            log("שגיאה: ${e.javaClass.simpleName}: ${e.message}")
-            return Result(false, "שגיאה: ${e.message}")
+        } catch (t: Throwable) {
+            logError("חיבור/הפעלה", t)
+            return Result(false, "שגיאה: ${t.message ?: t.javaClass.simpleName}")
         } finally {
             runCatching { mgr.close() }
         }
+    }
+
+    /** Logs an exception with its type, message and first stack frames, for diagnosis. */
+    private fun logError(stage: String, t: Throwable) {
+        log("✖ שגיאה בשלב '$stage': ${t.javaClass.name}: ${t.message}")
+        t.cause?.let { log("   סיבה: ${it.javaClass.name}: ${it.message}") }
+        t.stackTrace.take(4).forEach { log("   at $it") }
     }
 
     private fun interpret(output: String): Result {

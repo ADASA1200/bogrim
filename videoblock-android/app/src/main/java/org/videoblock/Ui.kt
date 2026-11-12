@@ -102,7 +102,7 @@ fun Activity.outlinedButton(s: String, onClick: () -> Unit) =
 
 fun Activity.toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_LONG).show()
 
-/** A numeric, password-masked field wrapped in a Material text box. */
+/** A numeric, password-masked field with a show/hide toggle, wrapped in a Material text box. */
 fun Activity.pinField(hint: String): Pair<TextInputLayout, TextInputEditText> {
     val edit = TextInputEditText(this).apply {
         inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
@@ -113,6 +113,7 @@ fun Activity.pinField(hint: String): Pair<TextInputLayout, TextInputEditText> {
     val layout = TextInputLayout(this).apply {
         this.hint = hint
         isCounterEnabled = false
+        endIconMode = TextInputLayout.END_ICON_PASSWORD_TOGGLE   // eye icon to reveal the digits
         addView(edit)
     }
     return layout to edit
@@ -139,28 +140,37 @@ fun Activity.askPin(onOk: () -> Unit) {
         .show()
 }
 
-/** Asks for a new removal password twice (minimum 6 digits). */
+/**
+ * Asks for a new removal password (minimum 6 digits). A single field with a show/hide toggle, so
+ * there is no confusing "type it twice" step — the user can reveal what they typed before saving.
+ */
 fun Activity.newPin(cancelable: Boolean, onDone: () -> Unit) {
-    val (l1, a) = pinField("סיסמה חדשה (לפחות 6 ספרות)")
-    val (l2, b) = pinField("הקלד שוב")
+    val (layout, edit) = pinField("סיסמה חדשה (לפחות 6 ספרות)")
     val box = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(20), dp(8), dp(20), 0)
-        addView(l1); addView(l2)
+        addView(layout)
     }
     MaterialAlertDialogBuilder(this)
         .setTitle("הגדרת סיסמת הסרה")
-        .setMessage("מומלץ למסור את הסיסמה לאדם אחר (רב / הורה / חבר) ולא לשמור אותה אצלך.")
+        .setMessage("הקש על סמל העין כדי לראות את הספרות. מומלץ למסור את הסיסמה לאדם אחר " +
+            "(רב / הורה / חבר) ולא לשמור אותה אצלך.")
         .setView(box)
         .setCancelable(cancelable)
-        .setPositiveButton("שמור") { _, _ ->
-            val p = a.text.toString()
-            when {
-                p.length < 6 -> { toast("הסיסמה חייבת להכיל לפחות 6 ספרות"); newPin(cancelable, onDone) }
-                p != b.text.toString() -> { toast("הסיסמאות אינן תואמות"); newPin(cancelable, onDone) }
-                else -> { Prefs(this).setPin(p); toast("הסיסמה נשמרה"); onDone() }
-            }
-        }
+        .setPositiveButton("שמור", null) // overridden below so a short password doesn't close the dialog
         .apply { if (cancelable) setNegativeButton("ביטול", null) }
         .show()
+        .also { dialog ->
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val p = edit.text.toString()
+                if (p.length < 6) {
+                    toast("הסיסמה חייבת להכיל לפחות 6 ספרות")
+                } else {
+                    Prefs(this).setPin(p)
+                    toast("הסיסמה נשמרה")
+                    dialog.dismiss()
+                    onDone()
+                }
+            }
+        }
 }

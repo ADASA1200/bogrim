@@ -13,26 +13,27 @@ import java.math.BigInteger
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.PrivateKey
-import java.security.Security
 import java.security.cert.Certificate
 import java.security.interfaces.RSAPrivateKey
-import java.security.interfaces.RSAPublicKey
 import java.security.spec.PKCS8EncodedKeySpec
-import java.security.spec.X509EncodedKeySpec
 import java.util.Date
+import java.util.concurrent.TimeUnit
 
 /**
  * Self-ADB connection manager built on libadb-android (the same pure-Java ADB + SPAKE2 pairing
- * stack used by PCAPdroid-MDM and Switch). It holds one persisted RSA identity + self-signed
- * certificate, which the device authorises once (via the pairing code or the "Allow debugging"
- * dialog) and then remembers.
+ * stack used by PCAPdroid-MDM and Switch). Holds one persisted RSA identity + self-signed
+ * certificate, which the device authorises once and then remembers.
+ *
+ * Note: it does NOT register BouncyCastle as the global "BC" security provider — Android already
+ * ships a (stripped, deprecated) provider under that name, and overriding it crashes. Instead we
+ * pass a private BouncyCastle provider instance only to the certificate builders.
  */
 class AdbManager private constructor(private val key: PrivateKey, private val cert: Certificate) :
     AbsAdbConnectionManager() {
 
     init {
         api = android.os.Build.VERSION.SDK_INT
-        setTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+        setTimeout(20, TimeUnit.SECONDS)
     }
 
     override fun getPrivateKey(): PrivateKey = key
@@ -55,17 +56,10 @@ class AdbManager private constructor(private val key: PrivateKey, private val ce
     }
 
     companion object {
-        @Volatile private var instance: AdbManager? = null
-
-        fun get(context: Context): AdbManager {
-            instance?.let { return it }
-            synchronized(this) {
-                instance?.let { return it }
-                if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null)
-                    Security.addProvider(BouncyCastleProvider())
-                val (priv, cert) = loadOrCreateIdentity(context)
-                return AdbManager(priv, cert).also { instance = it }
-            }
+        /** Fresh manager per attempt (identity is persisted), so a closed connection is never reused. */
+        fun create(context: Context): AdbManager {
+            val (priv, cert) = loadOrCreateIdentity(context)
+            return AdbManager(priv, cert)
         }
 
         private fun loadOrCreateIdentity(context: Context): Pair<PrivateKey, Certificate> {
@@ -81,16 +75,15 @@ class AdbManager private constructor(private val key: PrivateKey, private val ce
                 val cert = cf.generateCertificate(Base64.decode(certB64, Base64.NO_WRAP).inputStream())
                 return priv to cert
             }
+            val provider = BouncyCastleProvider() // local instance; not registered globally
             val kp = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
             val subject = X500Name("CN=VideoBlock, O=VideoBlock, C=IL")
             val now = System.currentTimeMillis()
             val builder = JcaX509v3CertificateBuilder(
                 subject, BigInteger.valueOf(now), Date(now - 86_400_000L),
                 Date(now + 30L * 365 * 86_400_000L), subject, kp.public)
-            val signer = JcaContentSignerBuilder("SHA256withRSA")
-                .setProvider(BouncyCastleProvider.PROVIDER_NAME).build(kp.private)
-            val cert = JcaX509CertificateConverter()
-                .setProvider(BouncyCastleProvider.PROVIDER_NAME)
+            val signer = JcaContentSignerBuilder("SHA256withRSA").setProvider(provider).build(kp.private)
+            val cert = JcaX509CertificateConverter().setProvider(provider)
                 .getCertificate(builder.build(signer))
             sp.edit()
                 .putString("priv", Base64.encodeToString((kp.private as RSAPrivateKey).encoded, Base64.NO_WRAP))
