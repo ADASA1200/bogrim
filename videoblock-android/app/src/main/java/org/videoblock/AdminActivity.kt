@@ -1,6 +1,6 @@
 package org.videoblock
 
-import android.app.Activity
+import androidx.appcompat.app.AppCompatActivity
 import android.app.AlertDialog
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
@@ -12,7 +12,7 @@ import android.widget.ScrollView
 import android.widget.Switch
 
 /** PIN-protected settings. Closes itself as soon as it leaves the screen, so the PIN is asked again. */
-class AdminActivity : Activity() {
+class AdminActivity : AppCompatActivity() {
     private lateinit var prefs: Prefs
 
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -1,104 +1,149 @@
 package org.videoblock
 
-import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.net.nsd.NsdManager
-import android.net.nsd.NsdServiceInfo
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.text.InputType
+import android.text.method.ScrollingMovementMethod
+import android.view.Gravity
+import android.view.View
+import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import org.videoblock.adb.Provisioner
-import java.util.concurrent.atomic.AtomicInteger
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
- * One-tap self-provisioning. The user turns on debugging; this activity connects to the device's
- * own adbd and runs `dpm set-device-owner` — no PC and no typed command. Everything happens only
- * after the user approves the on-device "Allow debugging" dialog.
+ * One-tap self-provisioning with full diagnostics. The user enables debugging, (on Android 11+)
+ * pairs with the 6-digit code, and the app runs `dpm set-device-owner` over a local ADB
+ * connection — no PC. Every step is written to an on-screen log.
  */
-class ProvisioningActivity : Activity() {
+class ProvisioningActivity : AppCompatActivity() {
 
-    private val discoveredPort = AtomicInteger(0)
-    private var nsd: NsdManager? = null
-    private var listener: NsdManager.DiscoveryListener? = null
+    private val logText = StringBuilder()
+    private lateinit var logView: TextView
+    private val ui = android.os.Handler(android.os.Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        render(null)
-        startPortDiscovery()
-    }
-
-    private fun render(status: String?) {
         val col = column()
-        col.addView(text("הפעלה אוטומטית של החסימה", 22f, bold = true))
-        col.addView(text(
-            "כך מפעילים את החסימה בלי מחשב ובלי להקליד פקודות:\n\n" +
-            "1. פתח 'אפשרויות מפתחים' (הקש 7 פעמים על 'מספר גרסה' בתוך הגדרות ← אודות).\n" +
-            (if (Build.VERSION.SDK_INT >= 30)
-                "2. הפעל 'ניפוי באגים אלחוטי' (Wireless debugging).\n"
-             else
-                "2. הפעל 'ניפוי באגים ב-USB'.\n") +
-            "3. חזור לכאן והקש 'הפעל חסימה'.\n" +
-            "4. אשר את חלון 'אפשר ניפוי באגים' שיופיע. זהו — החסימה תופעל."
-        ))
-        col.addView(button("פתח אפשרויות מפתחים") {
-            runCatching { startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)) }
-                .onFailure { runCatching { startActivity(Intent(Settings.ACTION_DEVICE_INFO_SETTINGS)) } }
+        col.addView(header("הפעלה אוטומטית", "ללא מחשב — האפליקציה מפעילה את עצמה"))
+
+        col.addView(card {
+            val wireless = Build.VERSION.SDK_INT >= 30
+            addView(text("שלבים", 18f, bold = true))
+            addView(text(
+                "1. פתח 'אפשרויות מפתחים' (7 הקשות על 'מספר גרסה' בהגדרות ← אודות).\n" +
+                (if (wireless)
+                    "2. הפעל 'ניפוי באגים אלחוטי'.\n" +
+                    "3. היכנס ל'התאמה באמצעות קוד' (Pair device with pairing code) — יוצג קוד בן 6 ספרות.\n" +
+                    "4. הקלד כאן את הקוד והקש 'צמד והפעל'."
+                 else
+                    "2. הפעל 'ניפוי באגים ב-USB'.\n" +
+                    "3. הקש 'חבר והפעל' ואשר את חלון ניפוי הבאגים.")
+            ))
+            addView(outlinedButton("פתח אפשרויות מפתחים") { openDev() })
         })
-        col.addView(button("הפעל חסימה") { runProvision() })
-        status?.let { col.addView(text(it, 16f, bold = true)) }
-        col.addView(text(
-            "אם מופיעה הודעה שצריך חיבור ADB: במכשירי אנדרואיד 11 ומעלה 'ניפוי אלחוטי' פותח " +
-            "את החיבור לבד. במכשירים ישנים יותר ייתכן שצריך להפעיל פעם אחת 'adb tcpip 5555' ממחשב " +
-            "(פעולה חד-פעמית). לאחר מכן האפליקציה עושה את כל השאר לבד.", 13f))
+
+        if (Build.VERSION.SDK_INT >= 30) {
+            col.addView(card {
+                addView(text("צימוד אלחוטי", 18f, bold = true))
+                val (layout, edit) = codeField()
+                addView(layout)
+                addView(button("צמד והפעל") {
+                    val code = edit.text.toString().trim()
+                    if (code.length < 6) { toast("הקלד את קוד הצימוד בן 6 הספרות"); return@button }
+                    runFlow(pairCode = code)
+                })
+            })
+        }
+
+        col.addView(card {
+            addView(text("כבר מצומד? (או ניפוי USB)", 16f, bold = true))
+            addView(outlinedButton("חבר והפעל") { runFlow(pairCode = null) })
+        })
+
+        // Extended diagnostics log.
+        col.addView(card {
+            addView(text("לוג מפורט", 16f, bold = true))
+            logView = TextView(this@ProvisioningActivity).apply {
+                textSize = 12f
+                setTextColor(resources.getColor(R.color.muted))
+                typeface = android.graphics.Typeface.MONOSPACE
+                textDirection = View.TEXT_DIRECTION_LTR
+                gravity = Gravity.START
+                movementMethod = ScrollingMovementMethod()
+                minLines = 6
+            }
+            addView(logView)
+            addView(outlinedButton("העתק לוג") {
+                (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                    .setPrimaryClip(ClipData.newPlainText("log", logText.toString()))
+                toast("הלוג הועתק")
+            })
+        })
+
         setContentView(ScrollView(this).apply { addView(col) })
+        log("מוכן. אנדרואיד API ${Build.VERSION.SDK_INT}.")
     }
 
-    private fun runProvision() {
-        render("מתחבר… אשר את חלון ניפוי הבאגים אם הוא מופיע.")
+    private fun codeField(): Pair<TextInputLayout, TextInputEditText> {
+        val edit = TextInputEditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            textDirection = View.TEXT_DIRECTION_LTR
+            gravity = Gravity.CENTER
+            textSize = 22f
+        }
+        val layout = TextInputLayout(this).apply {
+            hint = "קוד צימוד (6 ספרות)"
+            addView(edit)
+        }
+        return layout to edit
+    }
+
+    private fun openDev() {
+        runCatching { startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)) }
+            .onFailure { runCatching { startActivity(Intent(Settings.ACTION_DEVICE_INFO_SETTINGS)) } }
+    }
+
+    private fun runFlow(pairCode: String?) {
+        log("— מתחיל —")
         Thread {
-            val port = discoveredPort.get().takeIf { it > 0 }
-            val outcome = Provisioner(this).provision(port)
-            runOnUiThread {
-                if (outcome.ok) {
+            val prov = Provisioner(this) { line -> log(line) }
+            if (pairCode != null) {
+                if (!prov.pair(pairCode)) {
+                    ui.post { toast("הצימוד נכשל — ראה לוג") }
+                    return@Thread
+                }
+            }
+            val result = prov.connectAndProvision()
+            ui.post {
+                if (result.ok) {
                     Policy.enforceAsync(this)
-                    toast("החסימה הופעלה")
+                    toast("ההגנה הופעלה")
                     startActivity(Intent(this, MainActivity::class.java)
                         .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
                     finish()
-                } else render(outcome.message)
+                } else toast(result.message)
             }
         }.start()
     }
 
-    /** Looks for the wireless-debugging connect service on API 30+, to learn its port. */
-    private fun startPortDiscovery() {
-        if (Build.VERSION.SDK_INT < 30) return
-        val manager = getSystemService(Context.NSD_SERVICE) as? NsdManager ?: return
-        nsd = manager
-        listener = object : NsdManager.DiscoveryListener {
-            override fun onDiscoveryStarted(serviceType: String) {}
-            override fun onServiceFound(info: NsdServiceInfo) {
-                runCatching {
-                    manager.resolveService(info, object : NsdManager.ResolveListener {
-                        override fun onServiceResolved(s: NsdServiceInfo) { discoveredPort.set(s.port) }
-                        override fun onResolveFailed(s: NsdServiceInfo, e: Int) {}
-                    })
-                }
-            }
-            override fun onServiceLost(info: NsdServiceInfo) {}
-            override fun onDiscoveryStopped(serviceType: String) {}
-            override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {}
-            override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {}
+    private fun log(line: String) {
+        val ts = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
+        synchronized(logText) { logText.append("[$ts] ").append(line).append('\n') }
+        ui.post {
+            logView.text = logText.toString()
+            (logView.parent.parent as? ScrollView)?.post { }
         }
-        runCatching {
-            manager.discoverServices("_adb-tls-connect._tcp", NsdManager.PROTOCOL_DNS_SD, listener)
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        runCatching { listener?.let { nsd?.stopServiceDiscovery(it) } }
     }
 }
